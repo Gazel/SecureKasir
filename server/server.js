@@ -38,19 +38,20 @@ async function initDatabase() {
 
   // Transactions header
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id VARCHAR(50) PRIMARY KEY,
-      subtotal INT NOT NULL,
-      discount INT NOT NULL,
-      total INT NOT NULL,
-      date DATETIME NOT NULL,
-      payment_method VARCHAR(20) NOT NULL,
-      cash_received INT,
-      change_amount INT,
-      customer_name VARCHAR(100),
-      note TEXT
-    );
-  `);
+  CREATE TABLE IF NOT EXISTS transactions (
+    id VARCHAR(20) PRIMARY KEY,
+    subtotal INT NOT NULL,
+    discount INT NOT NULL,
+    total INT NOT NULL,
+    date DATETIME NOT NULL,
+    payment_method VARCHAR(20) NOT NULL,
+    cash_received INT,
+    change_amount INT,
+    customer_name VARCHAR(100),
+    note TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'SUCCESS'
+  );
+`);
 
   // Transaction detail items
   await pool.query(`
