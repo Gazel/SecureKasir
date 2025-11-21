@@ -6,7 +6,7 @@ import {
   saveTransactionOnline,
 } from "../services/apiBackend";
 
-import { useAuth } from "./AuthContext"; // ✅ get JWT
+import { useAuth } from "./AuthContext";
 
 interface CartContextProps {
   cart: CartItem[];
@@ -18,30 +18,36 @@ interface CartContextProps {
   setDiscount: (discount: number) => void;
   transactions: Transaction[];
   reloadTransactions: () => Promise<void>;
-
-  // UPDATED: addTransaction now receives token automatically
-  addTransaction: (transaction: Omit<Transaction, "id">, token?: string) => Promise<void>;
-
+  addTransaction: (
+    transaction: Omit<Transaction, "id">,
+    token?: string
+  ) => Promise<void>;
   calculateTotal: () => { subtotal: number; total: number };
 }
 
 const CartContext = createContext<CartContextProps | undefined>(undefined);
 
-export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  const { token } = useAuth(); // ✅ auth token
+  const { token } = useAuth();
 
+  // ✅ FIX #1: pass token to fetchTransactionsOnline
   const reloadTransactions = async () => {
-    const data = await fetchTransactionsOnline();
+    if (!token) return; // wait for login
+    const data = await fetchTransactionsOnline(token);
     setTransactions(data);
   };
 
+  // ✅ FIX #2: run when token available / changes
   useEffect(() => {
     reloadTransactions();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   const addToCart = (item: Omit<CartItem, "subtotal">) => {
     const existingItem = cart.find((i) => i.productId === item.productId);
@@ -82,14 +88,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { subtotal, total: total < 0 ? 0 : total };
   };
 
-  /**
-   * IMPORTANT UPDATE:
-   * - Now we send JWT token to backend
-   * - Works for both:
-   *   addTransaction(trx)
-   *   addTransaction(trx, token)
-   */
-  const addTransaction = async (transaction: Omit<Transaction, "id">, customToken?: string) => {
+  const addTransaction = async (
+    transaction: Omit<Transaction, "id">,
+    customToken?: string
+  ) => {
     const authToken = customToken || token;
 
     if (!authToken) {
@@ -97,7 +99,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("Missing token");
     }
 
-    await saveTransactionOnline(transaction, authToken); // ✅ token sent
+    await saveTransactionOnline(transaction, authToken);
     await reloadTransactions();
     clearCart();
   };
