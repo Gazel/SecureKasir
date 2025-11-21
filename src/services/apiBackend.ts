@@ -3,10 +3,20 @@ import type { Transaction, Product } from "../types";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+// helper to attach token
+function authHeader(token: string) {
+  return { Authorization: `Bearer ${token}` };
+}
+
 /* ============ TRANSACTIONS ============ */
 
-export async function fetchTransactionsOnline(): Promise<Transaction[]> {
-  const res = await fetch(`${API_URL}/api/transactions`);
+export async function fetchTransactionsOnline(
+  token: string
+): Promise<Transaction[]> {
+  const res = await fetch(`${API_URL}/api/transactions`, {
+    headers: authHeader(token),
+  });
+
   if (!res.ok) {
     console.error("Failed fetching transactions", res.status);
     return [];
@@ -33,11 +43,15 @@ export async function fetchTransactionsOnline(): Promise<Transaction[]> {
 }
 
 export async function saveTransactionOnline(
-  transaction: Omit<Transaction, "id"> // ✅ force backend-generated ID
+  transaction: Omit<Transaction, "id">, // backend generates ID
+  token: string
 ): Promise<{ success: boolean; id: string }> {
   const res = await fetch(`${API_URL}/api/transactions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(token),
+    },
     body: JSON.stringify(transaction),
   });
 
@@ -50,8 +64,12 @@ export async function saveTransactionOnline(
 
 /* ============ PRODUCTS ============ */
 
-export async function fetchProductsOnline(): Promise<Product[]> {
-  const res = await fetch(`${API_URL}/api/products`);
+export async function fetchProductsOnline(
+  token: string
+): Promise<Product[]> {
+  const res = await fetch(`${API_URL}/api/products`, {
+    headers: authHeader(token),
+  });
 
   if (!res.ok) {
     console.error("Failed fetching products", res.status);
@@ -71,11 +89,15 @@ export async function fetchProductsOnline(): Promise<Product[]> {
 }
 
 export async function createProductOnline(
-  product: Omit<Product, "id">
+  product: Omit<Product, "id">,
+  token: string
 ): Promise<Product> {
   const res = await fetch(`${API_URL}/api/products`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(token),
+    },
     body: JSON.stringify(product),
   });
 
@@ -96,11 +118,15 @@ export async function createProductOnline(
 
 export async function updateProductOnline(
   id: string,
-  product: Omit<Product, "id">
+  product: Omit<Product, "id">,
+  token: string
 ): Promise<Product> {
   const res = await fetch(`${API_URL}/api/products/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(token),
+    },
     body: JSON.stringify(product),
   });
 
@@ -119,9 +145,13 @@ export async function updateProductOnline(
   };
 }
 
-export async function deleteProductOnline(id: string): Promise<void> {
+export async function deleteProductOnline(
+  id: string,
+  token: string
+): Promise<void> {
   const res = await fetch(`${API_URL}/api/products/${id}`, {
     method: "DELETE",
+    headers: authHeader(token),
   });
 
   if (!res.ok) {
