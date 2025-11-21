@@ -14,11 +14,13 @@ export async function fetchTransactionsOnline(): Promise<Transaction[]> {
   return await res.json();
 }
 
-export async function saveTransactionOnline(transaction: Transaction) {
+export async function saveTransactionOnline(
+  transaction: Transaction
+): Promise<{ success: boolean }> {
   const res = await fetch(`${API_URL}/api/transactions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(transaction)
+    body: JSON.stringify(transaction),
   });
 
   if (!res.ok) {
@@ -32,15 +34,22 @@ export async function saveTransactionOnline(transaction: Transaction) {
 
 export async function fetchProductsOnline(): Promise<Product[]> {
   const res = await fetch(`${API_URL}/api/products`);
+
   if (!res.ok) {
     console.error("Failed fetching products", res.status);
     return [];
   }
+
   const data = await res.json();
-  // pastikan id selalu string
-  return data.map((p: any) => ({
-    ...p,
-    id: String(p.id)
+
+  // Normalise ID to string & numeric fields
+  return (data as any[]).map((p) => ({
+    id: String(p.id),
+    name: p.name,
+    price: Number(p.price),
+    image: p.image ?? "",
+    category: p.category ?? "",
+    stock: Number(p.stock ?? 0),
   }));
 }
 
@@ -50,7 +59,7 @@ export async function createProductOnline(
   const res = await fetch(`${API_URL}/api/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(product)
+    body: JSON.stringify(product),
   });
 
   if (!res.ok) {
@@ -58,7 +67,14 @@ export async function createProductOnline(
   }
 
   const data = await res.json();
-  return { ...data, id: String(data.id) };
+  return {
+    id: String(data.id),
+    name: data.name,
+    price: Number(data.price),
+    image: data.image ?? "",
+    category: data.category ?? "",
+    stock: Number(data.stock ?? 0),
+  };
 }
 
 export async function updateProductOnline(
@@ -68,7 +84,7 @@ export async function updateProductOnline(
   const res = await fetch(`${API_URL}/api/products/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(product)
+    body: JSON.stringify(product),
   });
 
   if (!res.ok) {
@@ -76,12 +92,19 @@ export async function updateProductOnline(
   }
 
   const data = await res.json();
-  return { ...data, id: String(data.id) };
+  return {
+    id: String(data.id),
+    name: data.name,
+    price: Number(data.price),
+    image: data.image ?? "",
+    category: data.category ?? "",
+    stock: Number(data.stock ?? 0),
+  };
 }
 
 export async function deleteProductOnline(id: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/products/${id}`, {
-    method: "DELETE"
+    method: "DELETE",
   });
 
   if (!res.ok) {
