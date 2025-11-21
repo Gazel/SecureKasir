@@ -8,7 +8,7 @@ const Footer: React.FC = () => {
       <div className="container mx-auto px-4 py-3">
         <div className="flex flex-col sm:flex-row justify-between items-center">
           <div className="text-sm text-gray-600 dark:text-gray-400 mb-2 sm:mb-0">
-            &copy; {year} SecureKasir. Hak Cipta Dilindungi.
+            &copy; {year} Warung Jepang Abusan.
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-500">
             Versi 1.0.0
