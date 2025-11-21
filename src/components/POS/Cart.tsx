@@ -7,7 +7,10 @@ import Input from "../UI/Input";
 import Modal, { useModal } from "../UI/Modal";
 import Receipt from "./Receipt";
 
-const Cart: React.FC = () => {
+const Cart: React.FC<{
+  embeddedInDrawer?: boolean;
+  onCloseDrawer?: () => void;
+}> = ({ embeddedInDrawer = false, onCloseDrawer }) => {
   const {
     cart,
     updateQuantity,
@@ -35,15 +38,12 @@ const Cart: React.FC = () => {
   }, []);
 
   const handleQuantityChange = (productId: string, quantity: number) => {
-    if (quantity >= 1) {
-      updateQuantity(productId, quantity);
-    }
+    if (quantity >= 1) updateQuantity(productId, quantity);
   };
 
   const handlePayment = async () => {
     if (cart.length === 0) return;
 
-    // No discount on POS
     const safeDiscount = 0;
 
     if (
@@ -59,22 +59,21 @@ const Cart: React.FC = () => {
 
     const transaction = {
       items: [...cart],
-      subtotal,           // keep for backend
+      subtotal, // keep sending for backend compatibility
       discount: safeDiscount,
       total,
       date: new Date().toISOString(),
       paymentMethod,
       cashReceived: cashAmount,
       change: paymentMethod === "cash" ? cashAmount - total : 0,
-
-      // optional fields
       customerName,
       note,
     };
 
     try {
-      await addTransaction(transaction); // save ONLINE
+      await addTransaction(transaction);
       closeModal();
+      if (onCloseDrawer) onCloseDrawer(); // ✅ auto close drawer after success
 
       // reset fields
       setCashReceived("");
@@ -184,29 +183,33 @@ const Cart: React.FC = () => {
         </div>
       </div>
 
-      {/* Sticky Bottom Checkout Bar (mobile only) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
-            <div className="text-lg font-bold">{formatCurrency(total)}</div>
-          </div>
+      {/* Sticky Bottom Checkout Bar (mobile only, disabled in drawer) */}
+      {!embeddedInDrawer && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Total
+              </div>
+              <div className="text-lg font-bold">{formatCurrency(total)}</div>
+            </div>
 
-          <button
-            onClick={openModal}
-            disabled={cart.length === 0}
-            className="
-              flex-shrink-0
-              px-5 py-3 rounded-xl
-              bg-blue-600 text-white font-semibold
-              disabled:opacity-50 disabled:cursor-not-allowed
-              active:scale-[0.98]
-            "
-          >
-            Bayar
-          </button>
+            <button
+              onClick={openModal}
+              disabled={cart.length === 0}
+              className="
+                flex-shrink-0
+                px-5 py-3 rounded-xl
+                bg-blue-600 text-white font-semibold
+                disabled:opacity-50 disabled:cursor-not-allowed
+                active:scale-[0.98]
+              "
+            >
+              Bayar
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Checkout Modal */}
       <Modal
