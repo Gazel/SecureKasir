@@ -2,9 +2,9 @@ export interface Product {
   id: string;
   name: string;
   price: number;
-  image: string;
+  image: string;     // still here for backward compat, even if UI hides it
   category: string;
-  stock: number;
+  stock: number | null; // null = unlimited
 }
 
 export interface CartItem {
@@ -15,6 +15,9 @@ export interface CartItem {
   subtotal: number;
 }
 
+export type PaymentMethod = "cash" | "qris" | "cancelled";
+export type TransactionStatus = "SUCCESS" | "CANCELLED";
+
 export interface Transaction {
   id: string;
   items: CartItem[];
@@ -22,11 +25,10 @@ export interface Transaction {
   discount: number;
   total: number;
   date: string;
-  paymentMethod: "cash" | "qris" | "cancelled"; // add cancelled
+  paymentMethod: PaymentMethod;
   cashReceived: number;
   change: number;
   customerName?: string;
   note?: string;
-  status: "SUCCESS" | "CANCELLED";  // add status
+  status?: TransactionStatus; // optional on client send, backend will default
 }
-
