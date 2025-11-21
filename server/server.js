@@ -1,161 +1,216 @@
-// server/server.js
+// server/server.js - MySQL-backed API
 import express from "express";
 import cors from "cors";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// === DATA DIR & JSON FILES ===
-const dataDir = path.join(__dirname, "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const TRANSACTIONS_FILE = path.join(dataDir, "transactions.json");
-const PRODUCTS_FILE = path.join(dataDir, "products.json");
-
-function loadJson(filePath, defaultValue) {
-  try {
-    if (!fs.existsSync(filePath)) return defaultValue;
-    const raw = fs.readFileSync(filePath, "utf8");
-    if (!raw) return defaultValue;
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error(`Error reading ${filePath}`, err);
-    return defaultValue;
-  }
-}
-
-function saveJson(filePath, data) {
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-  } catch (err) {
-    console.error(`Error writing ${filePath}`, err);
-  }
-}
+import mysql from "mysql2/promise";
 
 const app = express();
-const PORT = process.env.PORT || 4000;
-
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// === IN-MEMORY STATE + LOAD DARI FILE ===
-let transactions = loadJson(TRANSACTIONS_FILE, []);
-let products = loadJson(PRODUCTS_FILE, []);
-
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", time: new Date().toISOString() });
+// ---------- MySQL CONNECTION ----------
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "securekasir",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "securekasir",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
-// =================== TRANSACTIONS ===================
+// ---------- DB INIT (TABLES) ----------
+async function initDb() {
+  const conn = await pool.getConnection();
+  try {
+    // Tabel transaksi
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id VARCHAR(50) PRIMARY KEY,
+        subtotal INT NOT NULL,
+        discount INT NOT NULL DEFAULT 0,
+        total INT NOT NULL,
+        payment_method VARCHAR(20) NOT NULL,
+        cash_received INT NOT NULL DEFAULT 0,
+        \`change\` INT NOT NULL DEFAULT 0,
+        date DATETIME NOT NULL,
+        customer_name VARCHAR(255) NULL,
+        note TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-// GET all transactions
-app.get("/api/transactions", (req, res) => {
-  res.json(transactions);
+    // Tabel item transaksi
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS transaction_items (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        transaction_id VARCHAR(50) NOT NULL,
+        product_id VARCHAR(50) NULL,
+        name VARCHAR(255) NOT NULL,
+        price INT NOT NULL,
+        quantity INT NOT NULL,
+        subtotal INT NOT NULL,
+        FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+      )
+    `);
+  } finally {
+    conn.release();
+  }
+}
+
+// ---------- HELPERS ----------
+function mapTransactionRow(row, items) {
+  return {
+    id: row.id,
+    items,
+    subtotal: row.subtotal,
+    discount: row.discount,
+    total: row.total,
+    date: row.date.toISOString(), // frontend pakai string ISO
+    paymentMethod: row.payment_method,
+    cashReceived: row.cash_received,
+    change: row.change,
+    customerName: row.customer_name || "",
+    note: row.note || "",
+  };
+}
+
+// ---------- ROUTES ----------
+
+// Health check + cek koneksi DB
+app.get("/api/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({
+      status: "ok",
+      db: "connected",
+      time: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("Health check DB error:", err);
+    res.status(500).json({
+      status: "error",
+      db: "failed",
+      error: err.message,
+    });
+  }
 });
 
-// POST new transaction
-app.post("/api/transactions", (req, res) => {
+// Get all transactions (dengan items)
+app.get("/api/transactions", async (req, res) => {
+  try {
+    const [trxRows] = await pool.query(
+      "SELECT * FROM transactions ORDER BY date DESC"
+    );
+    const [itemRows] = await pool.query(
+      "SELECT * FROM transaction_items ORDER BY id ASC"
+    );
+
+    const itemsByTrx = {};
+    for (const item of itemRows) {
+      if (!itemsByTrx[item.transaction_id]) {
+        itemsByTrx[item.transaction_id] = [];
+      }
+      itemsByTrx[item.transaction_id].push({
+        productId: item.product_id || "",
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+      });
+    }
+
+    const result = trxRows.map((row) =>
+      mapTransactionRow(row, itemsByTrx[row.id] || [])
+    );
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error fetching transactions:", err);
+    res.status(500).json({ error: "Failed to fetch transactions" });
+  }
+});
+
+// Create transaction
+app.post("/api/transactions", async (req, res) => {
   const payload = req.body;
 
-  if (!payload || !Array.isArray(payload.items)) {
+  if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
     return res.status(400).json({ error: "Invalid transaction payload" });
   }
 
-  const newTransaction = {
-    id: payload.id,
-    items: payload.items,
-    subtotal: payload.subtotal,
-    discount: payload.discount ?? 0,
-    total: payload.total,
-    paymentMethod: payload.paymentMethod || "cash",
-    cashReceived: payload.cashReceived ?? 0,
-    change: payload.change ?? 0,
-    date: payload.date || new Date().toISOString(),
-    // optional fields
-    customerName: payload.customerName || "",
-    note: payload.note || "",
-  };
-
-  transactions.push(newTransaction);
-  saveJson(TRANSACTIONS_FILE, transactions);
-
-  res.status(201).json({ success: true, transaction: newTransaction });
-});
-
-// =================== PRODUCTS ===================
-
-// GET all products
-app.get("/api/products", (req, res) => {
-  res.json(products);
-});
-
-// POST new product
-app.post("/api/products", (req, res) => {
-  const payload = req.body;
-
-  if (!payload || !payload.id || !payload.name) {
-    return res.status(400).json({ error: "Invalid product payload" });
+  if (!payload.id) {
+    return res.status(400).json({ error: "Transaction id is required" });
   }
 
-  const newProduct = {
-    id: payload.id,
-    name: payload.name,
-    price: payload.price ?? 0,
-    image: payload.image || "",
-    category: payload.category || "Umum",
-    stock: payload.stock ?? 0,
-  };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  products.push(newProduct);
-  saveJson(PRODUCTS_FILE, products);
+    // Insert ke tabel transactions
+    await conn.query(
+      `
+      INSERT INTO transactions (
+        id, subtotal, discount, total,
+        payment_method, cash_received, \`change\`, date,
+        customer_name, note
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        payload.id,
+        payload.subtotal,
+        payload.discount || 0,
+        payload.total,
+        payload.paymentMethod,
+        payload.cashReceived || 0,
+        payload.change || 0,
+        new Date(payload.date),
+        payload.customerName || null,
+        payload.note || null,
+      ]
+    );
 
-  res.status(201).json({ success: true, product: newProduct });
-});
+    // Insert item-item transaksi
+    const itemValues = payload.items.map((item) => [
+      payload.id,
+      item.productId || null,
+      item.name,
+      item.price,
+      item.quantity,
+      item.subtotal,
+    ]);
 
-// PUT update product
-app.put("/api/products/:id", (req, res) => {
-  const { id } = req.params;
-  const payload = req.body;
+    await conn.query(
+      `
+      INSERT INTO transaction_items (
+        transaction_id, product_id, name, price, quantity, subtotal
+      )
+      VALUES ?
+      `,
+      [itemValues]
+    );
 
-  const index = products.findIndex((p) => p.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: "Product not found" });
+    await conn.commit();
+    res.json({ success: true });
+  } catch (err) {
+    await conn.rollback();
+    console.error("Error saving transaction:", err);
+    res.status(500).json({ error: "Failed to save transaction" });
+  } finally {
+    conn.release();
   }
-
-  const updated = {
-    ...products[index],
-    ...payload,
-    id, // jaga id tetap
-  };
-
-  products[index] = updated;
-  saveJson(PRODUCTS_FILE, products);
-
-  res.json({ success: true, product: updated });
 });
 
-// DELETE product
-app.delete("/api/products/:id", (req, res) => {
-  const { id } = req.params;
-  const before = products.length;
-  products = products.filter((p) => p.id !== id);
+// ---------- SERVER START ----------
+const PORT = process.env.PORT || 4000;
 
-  if (products.length === before) {
-    return res.status(404).json({ error: "Product not found" });
-  }
-
-  saveJson(PRODUCTS_FILE, products);
-  res.json({ success: true });
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 API Server Running on port ${PORT}`);
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 API Server Running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to init DB:", err);
+    process.exit(1);
+  });
