@@ -119,7 +119,7 @@ app.get("/api/transactions", async (req, res) => {
       "SELECT * FROM transaction_items"
     );
 
-    const trxList = trxRows;   // plain JS, no `as any[]`
+    const trxList = trxRows;
     const items = itemRows;
 
     const result = trxList.map((trx) => ({
@@ -133,6 +133,8 @@ app.get("/api/transactions", async (req, res) => {
       change: trx.change_amount ?? 0,
       customerName: trx.customer_name ?? undefined,
       note: trx.note ?? undefined,
+      status: trx.status || "SUCCESS",   // ✅ VERY IMPORTANT
+
       items: items
         .filter((item) => item.transaction_id === trx.id)
         .map((item) => ({
@@ -143,6 +145,13 @@ app.get("/api/transactions", async (req, res) => {
           subtotal: Number(item.subtotal),
         })),
     }));
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error loading transactions:", error);
+    res.status(500).json({ error: "Failed to load transactions" });
+  }
+});
 
     res.json(result);
   } catch (error) {
