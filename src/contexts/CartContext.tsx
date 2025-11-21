@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { CartItem, Transaction } from "../types";
-import { generateId } from "../utils/formatter";
 import {
   fetchTransactionsOnline,
   saveTransactionOnline,
@@ -34,9 +33,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     setTransactions(data);
   };
 
-  // ⬇️ useEffect DIPINDAH KE SINI (SETELAH reloadTransactions)
   useEffect(() => {
     reloadTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const addToCart = (item: Omit<CartItem, "subtotal">) => {
@@ -47,7 +46,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     if (existingItem) {
       updateQuantity(item.productId, existingItem.quantity + item.quantity);
     } else {
-      const newItem = {
+      const newItem: CartItem = {
         ...item,
         subtotal: item.price * item.quantity,
       };
@@ -80,13 +79,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     return { subtotal, total: total < 0 ? 0 : total };
   };
 
+  /**
+   * IMPORTANT:
+   * - Frontend no longer generates ID.
+   * - Backend will create id = YYYYMMDDXXX and return it.
+   * - We just send trx without id, then reload, then clear cart.
+   */
   const addTransaction = async (transaction: Omit<Transaction, "id">) => {
-    const newTransaction = {
-      ...transaction,
-      id: generateId(),
-    };
-
-    await saveTransactionOnline(newTransaction);
+    await saveTransactionOnline(transaction); // backend generates id
     await reloadTransactions();
     clearCart();
   };
