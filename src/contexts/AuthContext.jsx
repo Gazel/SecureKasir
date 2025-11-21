@@ -1,30 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type UserRole = "admin" | "cashier";
-
-export interface AuthUser {
-  id: string;
-  username: string;
-  full_name?: string;
-  role: UserRole;
-}
-
-interface AuthContextProps {
-  token: string | null;
-  user: AuthUser | null;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-  hasRole: (...roles: UserRole[]) => boolean;   // ✅ ADD
-}
-
-const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+const AuthContext = createContext(undefined);
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
+export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load saved session
@@ -44,7 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const login = async (username, password) => {
     const res = await fetch(`${API_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -71,8 +53,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("sk_user");
   };
 
-  // ✅ helper for checking roles in UI
-  const hasRole = (...roles: UserRole[]) => {
+  // helper for checking roles in UI
+  const hasRole = (...roles) => {
     if (!user) return false;
     return roles.includes(user.role);
   };
