@@ -115,7 +115,7 @@ const Cart: React.FC<{
   return (
     <div className="h-full flex flex-col">
       {/* Cart Items */}
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className={`flex-1 overflow-y-auto ${embeddedInDrawer ? "pb-4" : "pb-24"}`}>
         <div className="space-y-3 p-1">
           {cart.map((item) => (
             <div
