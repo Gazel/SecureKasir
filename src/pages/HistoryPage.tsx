@@ -6,7 +6,6 @@ import Modal, { useModal } from "../components/UI/Modal";
 import Receipt from "../components/POS/Receipt";
 
 type SortField = "date" | "total" | "items";
-type SortDirection = "asc" | "desc";
 
 const HistoryPage: React.FC = () => {
   const { transactions, reloadTransactions } = useCart();
@@ -17,62 +16,36 @@ const HistoryPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [selectedTransaction, setSelectedTransaction] = useState<any | null>(
-    null
-  );
+  const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("date");
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>("desc");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [dateFilter, setDateFilter] = useState("");
 
-  // Legacy receipt formatting (for old IDs only)
-  const formatLegacyReceiptNumber = (id: string, dateString: string): string => {
-    const d = new Date(dateString);
-    const year = d.getFullYear().toString().substring(2);
-    const month = (d.getMonth() + 1).toString().padStart(2, "0");
-    const day = d.getDate().toString().padStart(2, "0");
-    return `INV/${year}${month}${day}/${id.substring(0, 4).toUpperCase()}`;
-  };
-
-  // If ID already in YYYYMMDDXXX (all digits, length 11), show as-is.
-  const displayTransactionId = (trx: any) => {
-    const id = String(trx.id || "");
-    const isNewFormat = /^\d{11}$/.test(id);
-    return isNewFormat ? id : formatLegacyReceiptNumber(id, trx.date);
-  };
-
-  const toggleSort = (field: SortField) => {
-    if (sortField !== field) {
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      // toggle direction
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
       setSortField(field);
-      setSortDirection("desc"); // default when switching field
-      return;
+      setSortDirection("desc");
     }
-    setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
   };
 
   const filteredTransactions = useMemo(() => {
-    const searchLower = searchTerm.toLowerCase();
-
     return transactions
-      .filter((trx) => {
-        // search by id or customer name (optional improvement)
-        if (searchTerm) {
-          const idMatch = String(trx.id || "")
-            .toLowerCase()
-            .includes(searchLower);
+      .filter((transaction: any) => {
+        const searchLower = searchTerm.toLowerCase();
 
-          const customerMatch = String(trx.customerName || "")
-            .toLowerCase()
-            .includes(searchLower);
-
-          if (!idMatch && !customerMatch) return false;
+        // search by ID only (you can expand later)
+        if (searchTerm && !String(transaction.id).toLowerCase().includes(searchLower)) {
+          return false;
         }
 
-        // date filter exact day match
+        // date filter (same day)
         if (dateFilter) {
           const filterDate = new Date(dateFilter);
-          const trxDate = new Date(trx.date);
+          const trxDate = new Date(transaction.date);
 
           if (
             filterDate.getFullYear() !== trxDate.getFullYear() ||
@@ -85,11 +58,11 @@ const HistoryPage: React.FC = () => {
 
         return true;
       })
-      .sort((a, b) => {
+      .sort((a: any, b: any) => {
         let val = 0;
+
         if (sortField === "date") {
-          val =
-            new Date(a.date).getTime() - new Date(b.date).getTime();
+          val = new Date(a.date).getTime() - new Date(b.date).getTime();
         } else if (sortField === "total") {
           val = (a.total || 0) - (b.total || 0);
         } else if (sortField === "items") {
@@ -100,30 +73,33 @@ const HistoryPage: React.FC = () => {
       });
   }, [transactions, searchTerm, dateFilter, sortField, sortDirection]);
 
-  const viewTransaction = (trx: any) => {
-    setSelectedTransaction(trx);
+  const viewTransaction = (transaction: any) => {
+    setSelectedTransaction(transaction);
     openModal();
   };
 
   const renderPaymentLabel = (trx: any) => {
+    if (trx.status === "CANCELLED" || trx.paymentMethod === "cancelled") {
+      return "Cancelled";
+    }
     if (trx.paymentMethod === "cash") return "Tunai";
     if (trx.paymentMethod === "qris") return "QRIS";
-    return "Cancelled";
+    return trx.paymentMethod || "-";
   };
 
-  const renderStatusBadge = (trx: any) => {
-    const status = (trx.status || "SUCCESS").toUpperCase();
-    const isCancelled = status === "CANCELLED";
+  const renderStatusBadge = (status?: string) => {
+    const s = status || "SUCCESS";
+    const isCancelled = s === "CANCELLED";
 
     return (
       <span
-        className={
-          isCancelled
-            ? "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200"
-            : "inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-200"
-        }
+        className={`px-2 py-0.5 rounded-full text-xs font-semibold
+          ${isCancelled
+            ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+            : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+          }`}
       >
-        {isCancelled ? "CANCELLED" : "SUCCESS"}
+        {s}
       </span>
     );
   };
@@ -138,11 +114,11 @@ const HistoryPage: React.FC = () => {
           <div className="relative flex-1">
             <Search
               size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
             />
             <input
               type="text"
-              placeholder="Cari transaksi / nama pelanggan..."
+              placeholder="Cari transaksi (ID)..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -152,7 +128,7 @@ const HistoryPage: React.FC = () => {
           <div className="relative">
             <CalendarIcon
               size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
             />
             <input
               type="date"
@@ -177,7 +153,7 @@ const HistoryPage: React.FC = () => {
 
                   <th
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer"
-                    onClick={() => toggleSort("date")}
+                    onClick={() => handleSort("date")}
                   >
                     <div className="flex items-center">
                       Tanggal
@@ -187,7 +163,7 @@ const HistoryPage: React.FC = () => {
 
                   <th
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer"
-                    onClick={() => toggleSort("items")}
+                    onClick={() => handleSort("items")}
                   >
                     <div className="flex items-center">
                       Item
@@ -197,7 +173,7 @@ const HistoryPage: React.FC = () => {
 
                   <th
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer"
-                    onClick={() => toggleSort("total")}
+                    onClick={() => handleSort("total")}
                   >
                     <div className="flex items-center">
                       Total
@@ -209,6 +185,7 @@ const HistoryPage: React.FC = () => {
                     Pembayaran
                   </th>
 
+                  {/* NEW STATUS COLUMN */}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
                     Status
                   </th>
@@ -220,60 +197,60 @@ const HistoryPage: React.FC = () => {
               </thead>
 
               <tbody>
-                {filteredTransactions.map((trx) => (
-                  <tr
-                    key={trx.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-900"
-                  >
-                    <td className="px-4 py-3 font-medium">
-                      {displayTransactionId(trx)}
-                    </td>
+                {filteredTransactions.map((trx: any) => {
+                  const isCancelled =
+                    trx.status === "CANCELLED" || trx.paymentMethod === "cancelled";
 
-                    <td className="px-4 py-3">{formatDate(trx.date)}</td>
+                  return (
+                    <tr
+                      key={trx.id}
+                      className={`
+                        hover:bg-gray-50 dark:hover:bg-gray-900
+                        ${isCancelled ? "bg-red-50/50 dark:bg-red-950/20" : ""}
+                      `}
+                    >
+                      <td className="px-4 py-3 font-mono text-sm">
+                        {trx.id}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {formatDate(trx.date)}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {trx.items?.length || 0}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {formatCurrency(trx.total || 0)}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {renderPaymentLabel(trx)}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      {trx.items?.length || 0}
-                    </td>
+                      <td className="px-4 py-3 text-sm">
+                        {renderStatusBadge(trx.status)}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      {formatCurrency(trx.total || 0)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderPaymentLabel(trx)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {renderStatusBadge(trx)}
-                    </td>
-
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        className="text-blue-600"
-                        onClick={() => viewTransaction(trx)}
-                        title="Lihat detail"
-                      >
-                        <Eye size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          className="text-blue-600 dark:text-blue-400"
+                          onClick={() => viewTransaction(trx)}
+                        >
+                          <Eye size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       ) : (
-        <div className="p-8 text-center text-gray-500">
-          Tidak ada transaksi
-        </div>
+        <div className="p-8 text-center text-gray-500">Tidak ada transaksi</div>
       )}
 
+      {/* Modal */}
       {selectedTransaction && (
-        <Modal
-          isOpen={isOpen}
-          onClose={closeModal}
-          title="Detail Transaksi"
-        >
+        <Modal isOpen={isOpen} onClose={closeModal} title="Detail Transaksi">
           <Receipt {...selectedTransaction} />
         </Modal>
       )}
