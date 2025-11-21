@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import mysql from "mysql2/promise";
@@ -7,7 +8,14 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 const app = express();
-app.use(cors());
+
+// ✅ safer CORS (allow env override)
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "*",
+  })
+);
+
 app.use(express.json());
 
 // ---------------------------------------------
@@ -104,7 +112,7 @@ async function initDatabase() {
       price INT NOT NULL,
       image VARCHAR(255) DEFAULT '',
       category VARCHAR(100) DEFAULT '',
-      stock INT NOT NULL DEFAULT 0,
+      stock INT NOT NULL DEFAULT -1, -- ✅ unlimited by default
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     );
@@ -132,7 +140,7 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS transaction_items (
       id INT AUTO_INCREMENT PRIMARY KEY,
       transaction_id VARCHAR(50),
-      product_id VARCHAR(50),
+      product_id INT, -- ✅ keep numeric (matches products.id)
       name VARCHAR(255),
       price INT NOT NULL,
       quantity INT NOT NULL,
@@ -162,12 +170,13 @@ async function initDatabase() {
   if (userRows[0].c === 0) {
     const adminUsername = process.env.ADMIN_USERNAME || "admin";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin12345";
+    const adminFullname = process.env.ADMIN_FULLNAME || "Administrator";
     const hash = await bcrypt.hash(adminPassword, 10);
 
     await pool.query(
       `INSERT INTO users (username, password_hash, full_name, role)
        VALUES (?, ?, ?, 'admin')`,
-      [adminUsername, hash, "Administrator"]
+      [adminUsername, hash, adminFullname]
     );
 
     console.log("✅ Seeded default admin user:", adminUsername);
@@ -230,6 +239,7 @@ app.get("/api/users", authMiddleware, requireRole("admin"), async (req, res) => 
   res.json(rows);
 });
 
+// ✅ return created user row (frontend expects this)
 app.post("/api/users", authMiddleware, requireRole("admin"), async (req, res) => {
   try {
     const { username, password, full_name, role } = req.body;
@@ -240,13 +250,21 @@ app.post("/api/users", authMiddleware, requireRole("admin"), async (req, res) =>
 
     const hash = await bcrypt.hash(password, 10);
 
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO users (username, password_hash, full_name, role)
        VALUES (?, ?, ?, ?)`,
       [username, hash, full_name || null, role]
     );
 
-    res.json({ message: "User created" });
+    const insertId = result.insertId;
+
+    const [rows] = await pool.query(
+      `SELECT id, username, full_name, role, created_at
+       FROM users WHERE id=? LIMIT 1`,
+      [insertId]
+    );
+
+    res.json(rows[0]);
   } catch (err) {
     if (String(err).includes("Duplicate")) {
       return res.status(409).json({ message: "Username already exists" });
@@ -256,40 +274,78 @@ app.post("/api/users", authMiddleware, requireRole("admin"), async (req, res) =>
   }
 });
 
-app.put("/api/users/:id", authMiddleware, requireRole("admin"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { password, full_name, role, is_active } = req.body;
+// ✅ return updated user row (frontend expects this)
+app.put(
+  "/api/users/:id",
+  authMiddleware,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { username, password, full_name, role, is_active } = req.body;
 
-    if (password) {
-      const hash = await bcrypt.hash(password, 10);
-      await pool.query(
-        `UPDATE users
-         SET password_hash=?, full_name=?, role=?, is_active=?
-         WHERE id=?`,
-        [hash, full_name || null, role, is_active ?? 1, id]
+      // If changing password, hash it
+      if (password) {
+        const hash = await bcrypt.hash(password, 10);
+        await pool.query(
+          `UPDATE users
+           SET username=COALESCE(?, username),
+               password_hash=?,
+               full_name=?,
+               role=?,
+               is_active=?
+           WHERE id=?`,
+          [
+            username || null,
+            hash,
+            full_name || null,
+            role || "cashier",
+            is_active ?? 1,
+            id,
+          ]
+        );
+      } else {
+        await pool.query(
+          `UPDATE users
+           SET username=COALESCE(?, username),
+               full_name=?,
+               role=?,
+               is_active=?
+           WHERE id=?`,
+          [
+            username || null,
+            full_name || null,
+            role || "cashier",
+            is_active ?? 1,
+            id,
+          ]
+        );
+      }
+
+      const [rows] = await pool.query(
+        `SELECT id, username, full_name, role, created_at
+         FROM users WHERE id=? LIMIT 1`,
+        [id]
       );
-    } else {
-      await pool.query(
-        `UPDATE users
-         SET full_name=?, role=?, is_active=?
-         WHERE id=?`,
-        [full_name || null, role, is_active ?? 1, id]
-      );
+
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("Update user error:", err);
+      res.status(500).json({ message: "Update user failed" });
     }
-
-    res.json({ message: "User updated" });
-  } catch (err) {
-    console.error("Update user error:", err);
-    res.status(500).json({ message: "Update user failed" });
   }
-});
+);
 
-app.delete("/api/users/:id", authMiddleware, requireRole("admin"), async (req, res) => {
-  const { id } = req.params;
-  await pool.query(`UPDATE users SET is_active=0 WHERE id=?`, [id]);
-  res.json({ message: "User disabled" });
-});
+app.delete(
+  "/api/users/:id",
+  authMiddleware,
+  requireRole("admin"),
+  async (req, res) => {
+    const { id } = req.params;
+    await pool.query(`UPDATE users SET is_active=0 WHERE id=?`, [id]);
+    res.json({ message: "User disabled" });
+  }
+);
 
 // --------------------------------------------------------
 // TRANSACTIONS API (ADMIN + CASHIER)
@@ -308,10 +364,7 @@ app.get(
 
       const [itemRows] = await pool.query("SELECT * FROM transaction_items");
 
-      const trxList = trxRows;
-      const items = itemRows;
-
-      const result = trxList.map((trx) => ({
+      const result = trxRows.map((trx) => ({
         id: String(trx.id),
         subtotal: Number(trx.subtotal),
         discount: Number(trx.discount),
@@ -323,7 +376,7 @@ app.get(
         customerName: trx.customer_name ?? undefined,
         note: trx.note ?? undefined,
         status: trx.status || "SUCCESS",
-        items: items
+        items: itemRows
           .filter((item) => item.transaction_id === trx.id)
           .map((item) => ({
             productId: item.product_id ? String(item.product_id) : "",
@@ -362,10 +415,13 @@ app.post(
       status,
     } = req.body;
 
+    const conn = await pool.getConnection();
     try {
-      const newId = await generateDailyId(pool, date);
+      await conn.beginTransaction();
 
-      await pool.query(
+      const newId = await generateDailyId(conn, date);
+
+      await conn.query(
         `
         INSERT INTO transactions
           (id, subtotal, discount, total, date, payment_method,
@@ -388,7 +444,9 @@ app.post(
       );
 
       for (const item of items || []) {
-        await pool.query(
+        const productId = item.productId ? Number(item.productId) : null;
+
+        await conn.query(
           `
           INSERT INTO transaction_items
             (transaction_id, product_id, name, price, quantity, subtotal)
@@ -396,7 +454,7 @@ app.post(
         `,
           [
             newId,
-            item.productId,
+            productId,
             item.name,
             item.price,
             item.quantity,
@@ -405,23 +463,29 @@ app.post(
         );
       }
 
+      await conn.commit();
       res.json({ success: true, id: newId });
     } catch (error) {
+      await conn.rollback();
       console.error("Error saving transaction", error);
       res.status(500).json({ error: "Failed to save transaction" });
+    } finally {
+      conn.release();
     }
   }
 );
 
 // --------------------------------------------------------
-// PRODUCTS API (ADMIN ONLY)
+// PRODUCTS API
+// - GET: admin + cashier (POS needs this)
+// - POST/PUT/DELETE: admin only
 // --------------------------------------------------------
 
 // Get all products
 app.get(
   "/api/products",
   authMiddleware,
-  requireRole("admin"),
+  requireRole("admin", "cashier"), // ✅ cashier can read products
   async (req, res) => {
     try {
       const [rows] = await pool.query("SELECT * FROM products ORDER BY id ASC");
@@ -443,7 +507,7 @@ app.get(
   }
 );
 
-// Create product
+// Create product (admin)
 app.post(
   "/api/products",
   authMiddleware,
@@ -457,7 +521,7 @@ app.post(
           (name, price, image, category, stock)
         VALUES (?, ?, ?, ?, ?)
       `,
-        [name, price, image || "", category || "", stock ?? 0]
+        [name, price, image || "", category || "", stock ?? -1]
       );
 
       const insertId = result.insertId || result.insertID || null;
@@ -465,10 +529,10 @@ app.post(
       res.json({
         id: String(insertId),
         name,
-        price,
+        price: Number(price),
         image: image || "",
         category: category || "",
-        stock: stock ?? 0,
+        stock: stock ?? -1,
       });
     } catch (error) {
       console.error("Error creating product", error);
@@ -477,7 +541,7 @@ app.post(
   }
 );
 
-// Update product
+// Update product (admin)
 app.put(
   "/api/products/:id",
   authMiddleware,
@@ -497,16 +561,16 @@ app.put(
                stock = ?
          WHERE id = ?
       `,
-        [name, price, image || "", category || "", stock ?? 0, id]
+        [name, price, image || "", category || "", stock ?? -1, id]
       );
 
       res.json({
         id,
         name,
-        price,
+        price: Number(price),
         image: image || "",
         category: category || "",
-        stock: stock ?? 0,
+        stock: stock ?? -1,
       });
     } catch (error) {
       console.error("Error updating product", error);
@@ -515,7 +579,7 @@ app.put(
   }
 );
 
-// Delete product
+// Delete product (admin)
 app.delete(
   "/api/products/:id",
   authMiddleware,
