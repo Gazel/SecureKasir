@@ -1,66 +1,77 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
-const AuthContext = createContext(null);
+export type UserRole = "admin" | "cashier";
 
-const API =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+export interface AuthUser {
+  id: string;
+  username: string;
+  full_name?: string;
+  role: UserRole;
+}
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);     // {id, username, full_name, role}
-  const [token, setToken] = useState(localStorage.getItem("token"));
+interface AuthContextProps {
+  token: string | null;
+  user: AuthUser | null;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
+  isLoading: boolean;
+}
 
-  // load current user if token exists
+const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // load from localStorage on boot
   useEffect(() => {
-    if (!token) return;
+    const savedToken = localStorage.getItem("sk_token");
+    const savedUser = localStorage.getItem("sk_user");
 
-    fetch(`${API}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((u) => {
-        if (!u) throw new Error("invalid token");
-        setUser(u);
-      })
-      .catch(() => {
-        setUser(null);
-        setToken(null);
-        localStorage.removeItem("token");
-      });
-  }, [token]);
+    if (savedToken) setToken(savedToken);
+    if (savedUser) setUser(JSON.parse(savedUser));
+    setIsLoading(false);
+  }, []);
 
-  const login = async (username, password) => {
-    const res = await fetch(`${API}/api/auth/login`, {
+  const login = async (username: string, password: string) => {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
 
-    if (!res.ok) throw new Error("Invalid credentials");
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error("Invalid credentials");
+    }
+
+    const data = await res.json(); // { token, user }
 
     setToken(data.token);
-    localStorage.setItem("token", data.token);
     setUser(data.user);
+
+    localStorage.setItem("sk_token", data.token);
+    localStorage.setItem("sk_user", JSON.stringify(data.user));
   };
 
   const logout = () => {
-    setUser(null);
     setToken(null);
-    localStorage.removeItem("token");
+    setUser(null);
+    localStorage.removeItem("sk_token");
+    localStorage.removeItem("sk_user");
   };
 
-  const hasRole = (...roles) => user && roles.includes(user.role);
-
-  const value = useMemo(
-    () => ({ user, token, login, logout, hasRole }),
-    [user, token]
+  return (
+    <AuthContext.Provider value={{ token, user, login, logout, isLoading }}>
+      {children}
+    </AuthContext.Provider>
   );
+};
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
+export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
-}
+};
