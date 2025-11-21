@@ -1,66 +1,58 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { CartItem, Transaction } from '../types';
-import { generateId } from '../utils/formatter';
-import { saveTransactionOnline, fetchTransactionsOnline } from '../services/apiBackend';
+import React, { createContext, useContext, useState } from "react";
+import { CartItem, Transaction } from "../types";
+import { generateId } from "../utils/formatter";
+import {
+  fetchTransactionsOnline,
+  saveTransactionOnline,
+} from "../services/apiBackend";
 
 interface CartContextProps {
   cart: CartItem[];
-  addToCart: (item: Omit<CartItem, 'subtotal'>) => void;
+  addToCart: (item: Omit<CartItem, "subtotal">) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
   discount: number;
   setDiscount: (discount: number) => void;
   transactions: Transaction[];
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   reloadTransactions: () => Promise<void>;
+  addTransaction: (transaction: Omit<Transaction, "id">) => Promise<void>;
   calculateTotal: () => { subtotal: number; total: number };
 }
 
 const CartContext = createContext<CartContextProps | undefined>(undefined);
 
-export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-
-  // CART items stay local (not stored on server)
+export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState(0);
-
-  // FULL ONLINE transactions
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  // Load all transactions once from server
   const reloadTransactions = async () => {
-    try {
-      const data = await fetchTransactionsOnline();
-      setTransactions(data);
-    } catch (err) {
-      console.error("Failed to load transactions from server:", err);
-    }
+    const data = await fetchTransactionsOnline();
+    setTransactions(data);
   };
 
-  // Load transactions on first load
-  useEffect(() => {
-    reloadTransactions();
-  }, []);
+  const addToCart = (item: Omit<CartItem, "subtotal">) => {
+    const existingItem = cart.find(
+      (cartItem) => cartItem.productId === item.productId
+    );
 
-  // Add item to cart
-  const addToCart = (item: Omit<CartItem, 'subtotal'>) => {
-    const existingItem = cart.find(cartItem => cartItem.productId === item.productId);
-    
     if (existingItem) {
       updateQuantity(item.productId, existingItem.quantity + item.quantity);
     } else {
       const newItem = {
         ...item,
-        subtotal: item.price * item.quantity
+        subtotal: item.price * item.quantity,
       };
-      setCart(prev => [...prev, newItem]);
+      setCart((prev) => [...prev, newItem]);
     }
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
-    setCart(prev =>
-      prev.map(item =>
+    setCart((prev) =>
+      prev.map((item) =>
         item.productId === productId
           ? { ...item, quantity, subtotal: item.price * quantity }
           : item
@@ -69,7 +61,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.productId !== productId));
+    setCart((prev) => prev.filter((item) => item.productId !== productId));
   };
 
   const clearCart = () => {
@@ -83,44 +75,40 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { subtotal, total: total < 0 ? 0 : total };
   };
 
-  // 💥 FULL ONLINE: Add transaction via API, not localStorage
-  const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
-    const newTransaction: Transaction = {
+  const addTransaction = async (transaction: Omit<Transaction, "id">) => {
+    const newTransaction = {
       ...transaction,
       id: generateId(),
     };
 
-    try {
-      await saveTransactionOnline(newTransaction);   // SAVE TO SERVER
-      await reloadTransactions();                    // REFRESH LIST FROM SERVER
-    } catch (err) {
-      console.error("Failed to save transaction online:", err);
-    }
-
+    await saveTransactionOnline(newTransaction);
+    await reloadTransactions();
     clearCart();
   };
 
-  const value = {
-    cart,
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-    clearCart,
-    discount,
-    setDiscount,
-    transactions,
-    addTransaction,
-    reloadTransactions,
-    calculateTotal,
-  };
-
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  return (
+    <CartContext.Provider
+      value={{
+        cart,
+        addToCart,
+        updateQuantity,
+        removeFromCart,
+        clearCart,
+        discount,
+        setDiscount,
+        transactions,
+        reloadTransactions,
+        addTransaction,
+        calculateTotal,
+      }}
+    >
+      {children}
+    </CartContext.Provider>
+  );
 };
 
 export const useCart = () => {
   const context = useContext(CartContext);
-  if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
+  if (!context) throw new Error("useCart must be used inside CartProvider");
   return context;
 };
