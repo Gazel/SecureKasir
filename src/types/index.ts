@@ -22,10 +22,11 @@ export interface Transaction {
   discount: number;
   total: number;
   date: string;
-  paymentMethod: 'cash' | 'qris';
+  paymentMethod: "cash" | "qris" | "cancelled"; // add cancelled
   cashReceived: number;
   change: number;
   customerName?: string;
   note?: string;
+  status: "SUCCESS" | "CANCELLED";  // add status
 }
 
