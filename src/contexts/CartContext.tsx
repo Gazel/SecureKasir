@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { CartItem, Transaction } from "../types";
 import { generateId } from "../utils/formatter";
 import {
@@ -33,6 +33,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
     const data = await fetchTransactionsOnline();
     setTransactions(data);
   };
+
+  // ⬇️ useEffect DIPINDAH KE SINI (SETELAH reloadTransactions)
+  useEffect(() => {
+    reloadTransactions();
+  }, []);
 
   const addToCart = (item: Omit<CartItem, "subtotal">) => {
     const existingItem = cart.find(
