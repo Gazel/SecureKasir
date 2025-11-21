@@ -22,9 +22,10 @@ export interface Transaction {
   discount: number;
   total: number;
   date: string;
-  paymentMethod: string;
+  paymentMethod: 'cash' | 'qris';
   cashReceived: number;
   change: number;
   customerName?: string;
   note?: string;
 }
+
