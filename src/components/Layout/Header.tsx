@@ -23,7 +23,9 @@ const Header: React.FC = () => {
   const location = useLocation();
 
   const { cart } = useCart();
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout } = useAuth();
+  const hasRole = (role: "admin" | "cashier") => user?.role === role;
+
 
   // Dark mode toggle
   useEffect(() => {
