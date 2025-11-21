@@ -1,145 +1,142 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Product } from '../types';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { generateId } from '../utils/formatter';
-
-// Sample products
-const sampleProducts: Product[] = [
-  {
-    id: 'p1',
-    name: 'Nasi Goreng Spesial',
-    price: 25000,
-    image: 'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Makanan',
-    stock: 100
-  },
-  {
-    id: 'p2',
-    name: 'Es Teh Manis',
-    price: 5000,
-    image: 'https://images.pexels.com/photos/792613/pexels-photo-792613.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Minuman',
-    stock: 100
-  },
-  {
-    id: 'p3',
-    name: 'Ayam Goreng',
-    price: 15000,
-    image: 'https://images.pexels.com/photos/2338407/pexels-photo-2338407.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Makanan',
-    stock: 50
-  },
-  {
-    id: 'p4',
-    name: 'Es Jeruk',
-    price: 7000,
-    image: 'https://images.pexels.com/photos/96974/pexels-photo-96974.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Minuman',
-    stock: 80
-  },
-  {
-    id: 'p5',
-    name: 'Soto Ayam',
-    price: 20000,
-    image: 'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Makanan',
-    stock: 40
-  },
-  {
-    id: 'p6',
-    name: 'Kopi Hitam',
-    price: 8000,
-    image: 'https://images.pexels.com/photos/312418/pexels-photo-312418.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Minuman',
-    stock: 100
-  },
-  {
-    id: 'p7',
-    name: 'Mie Goreng Spesial',
-    price: 18000,
-    image: 'https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Makanan',
-    stock: 60
-  },
-  {
-    id: 'p8',
-    name: 'Air Mineral',
-    price: 4000,
-    image: 'https://images.pexels.com/photos/327090/pexels-photo-327090.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    category: 'Minuman',
-    stock: 200
-  }
-];
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Product } from "../types";
+import { generateId } from "../utils/formatter";
+import {
+  fetchProductsOnline,
+  createProductOnline,
+  updateProductOnline,
+  deleteProductOnline,
+} from "../services/apiBackend";
 
 interface ProductContextProps {
   products: Product[];
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  updateProduct: (product: Product) => void;
-  deleteProduct: (id: string) => void;
-  getProduct: (id: string) => Product | undefined;
   categories: string[];
+  addProduct: (product: Omit<Product, "id">) => void;
+  updateProduct: (product: Product) => void;
+  deleteProduct: (productId: string) => void;
+  reloadProducts: () => Promise<void>;
 }
 
 const ProductContext = createContext<ProductContextProps | undefined>(undefined);
 
+// optional: default seeding pertama kali kalau backend masih kosong
+const defaultProducts: Omit<Product, "id">[] = [
+  {
+    name: "Ayam Katsu Original",
+    price: 20000,
+    image: "https://via.placeholder.com/300x150?text=Katsu+Original",
+    category: "Makanan",
+    stock: 99,
+  },
+  {
+    name: "Ayam Katsu Spicy",
+    price: 22000,
+    image: "https://via.placeholder.com/300x150?text=Katsu+Spicy",
+    category: "Makanan",
+    stock: 99,
+  },
+];
+
 export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Use localStorage hook to persist products
-  const [products, setProducts] = useLocalStorage<Product[]>('pos-products', []);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  // Initialize with sample products if empty
-  useEffect(() => {
-    if (products.length === 0) {
-      setProducts(sampleProducts);
-    }
-  }, [products.length, setProducts]);
-
-  // Extract and maintain categories
-  useEffect(() => {
-    const uniqueCategories = Array.from(new Set(products.map(p => p.category)));
-    setCategories(uniqueCategories);
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return Array.from(set);
   }, [products]);
 
-  // Add a new product
-  const addProduct = (product: Omit<Product, 'id'>) => {
-    const newProduct = {
+  const reloadProducts = async () => {
+    try {
+      let data = await fetchProductsOnline();
+
+      // kalau kosong total, seed defaultProducts sekali
+      if (!data || data.length === 0) {
+        const seeded: Product[] = [];
+        for (const base of defaultProducts) {
+          const newProduct: Product = { ...base, id: generateId() };
+          await createProductOnline(newProduct);
+          seeded.push(newProduct);
+        }
+        data = seeded;
+      }
+
+      setProducts(data);
+    } catch (err) {
+      console.error("Failed to reload products", err);
+    }
+  };
+
+  useEffect(() => {
+    reloadProducts();
+  }, []);
+
+  const addProduct = (product: Omit<Product, "id">) => {
+    const newProduct: Product = {
       ...product,
       id: generateId(),
     };
-    setProducts(prev => [...prev, newProduct]);
+
+    // optimistik: update UI dulu
+    setProducts((prev) => [...prev, newProduct]);
+
+    (async () => {
+      try {
+        await createProductOnline(newProduct);
+      } catch (err) {
+        console.error("Failed to save product online", err);
+      }
+    })();
   };
 
-  // Update an existing product
   const updateProduct = (product: Product) => {
-    setProducts(prev => prev.map(p => p.id === product.id ? product : p));
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, ...product } : p))
+    );
+
+    (async () => {
+      try {
+        await updateProductOnline(product);
+      } catch (err) {
+        console.error("Failed to update product online", err);
+      }
+    })();
   };
 
-  // Delete a product
-  const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
+  const deleteProduct = (productId: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== productId));
+
+    (async () => {
+      try {
+        await deleteProductOnline(productId);
+      } catch (err) {
+        console.error("Failed to delete product online", err);
+      }
+    })();
   };
 
-  // Get a product by ID
-  const getProduct = (id: string) => {
-    return products.find(p => p.id === id);
-  };
-
-  const value = {
-    products,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    getProduct,
-    categories
-  };
-
-  return <ProductContext.Provider value={value}>{children}</ProductContext.Provider>;
+  return (
+    <ProductContext.Provider
+      value={{
+        products,
+        categories,
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        reloadProducts,
+      }}
+    >
+      {children}
+    </ProductContext.Provider>
+  );
 };
 
 export const useProducts = () => {
   const context = useContext(ProductContext);
-  if (context === undefined) {
-    throw new Error('useProducts must be used within a ProductProvider');
+  if (!context) {
+    throw new Error("useProducts must be used within a ProductProvider");
   }
   return context;
 };
