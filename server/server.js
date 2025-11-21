@@ -6,6 +6,38 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ---------------------------------------------
+// DAILY SEQUENTIAL ID HELPER
+// Format: YYYYMMDDXXX (001, 002, 003 per day)
+// ---------------------------------------------
+
+function formatYYYYMMDD(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+async function generateDailyId(pool, dateISO) {
+  const d = dateISO ? new Date(dateISO) : new Date();
+  const yyyymmdd = formatYYYYMMDD(d);
+
+  const [rows] = await pool.query(
+    "SELECT MAX(id) AS maxId FROM transactions WHERE id LIKE ?",
+    [`${yyyymmdd}%`]
+  );
+
+  const maxId = rows?.[0]?.maxId;
+  let nextSeq = 1;
+
+  if (maxId) {
+    const last3 = parseInt(maxId.slice(-3), 10);
+    if (!Number.isNaN(last3)) nextSeq = last3 + 1;
+  }
+
+  return `${yyyymmdd}${String(nextSeq).padStart(3, "0")}`;
+}
+
 // ⚡ Database Connection Pool (MariaDB / MySQL)
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "127.0.0.1",
@@ -122,7 +154,6 @@ app.get("/api/transactions", async (req, res) => {
 // Save transaction + items
 app.post("/api/transactions", async (req, res) => {
   const {
-    id,
     items,
     subtotal,
     discount,
@@ -133,27 +164,32 @@ app.post("/api/transactions", async (req, res) => {
     change,
     customerName,
     note,
+    status, // ✅ NEW
   } = req.body;
 
   try {
+    // ✅ generate backend ID: YYYYMMDDXXX
+    const newId = await generateDailyId(pool, date);
+
     await pool.query(
       `
       INSERT INTO transactions
         (id, subtotal, discount, total, date, payment_method,
-         cash_received, change_amount, customer_name, note)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cash_received, change_amount, customer_name, note, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
-        id,
+        newId,
         subtotal,
-        discount,
+        discount ?? 0,
         total,
         String(date).replace("T", " ").slice(0, 19),
         paymentMethod,
-        cashReceived,
-        change,
+        cashReceived ?? 0,
+        change ?? 0,
         customerName || null,
         note || null,
+        status || "SUCCESS", // ✅ default
       ]
     );
 
@@ -165,7 +201,7 @@ app.post("/api/transactions", async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?)
       `,
         [
-          id,
+          newId,
           item.productId,
           item.name,
           item.price,
@@ -175,7 +211,7 @@ app.post("/api/transactions", async (req, res) => {
       );
     }
 
-    res.json({ success: true });
+    res.json({ success: true, id: newId });
   } catch (error) {
     console.error("Error saving transaction", error);
     res.status(500).json({ error: "Failed to save transaction" });
