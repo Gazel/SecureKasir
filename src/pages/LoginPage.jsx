@@ -1,61 +1,79 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Button from "../components/UI/Button";
+import Input from "../components/UI/Input";
 import { useAuth } from "../contexts/AuthContext";
 
-export default function LoginPage() {
+const LoginPage: React.FC = () => {
+  const navigate = useNavigate();
   const { login } = useAuth();
-  const nav = useNavigate();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (e) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr("");
+    setErr(null);
+    setLoading(true);
+
     try {
-      await login(username, password);
-      nav("/"); // go to home
-    } catch {
+      await login(username.trim(), password);
+      navigate("/"); // go dashboard
+    } catch (e: any) {
       setErr("Username / password wrong");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <form
-        onSubmit={onSubmit}
-        className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow w-full max-w-sm"
-      >
-        <h1 className="text-xl font-bold mb-4 text-center text-gray-800 dark:text-gray-100">
-          SecureKasir Login
-        </h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-sm bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-6 border border-gray-200 dark:border-gray-700">
+        <h1 className="text-2xl font-bold mb-2 text-center">SecureKasir</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 text-center">
+          Login to continue
+        </p>
 
-        {err && <div className="mb-3 text-sm text-red-500">{err}</div>}
+        {err && (
+          <div className="mb-4 text-sm bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 p-2 rounded-md">
+            {err}
+          </div>
+        )}
 
-        <label className="text-sm text-gray-600 dark:text-gray-300">
-          Username
-        </label>
-        <input
-          className="w-full mt-1 mb-3 px-3 py-2 rounded border dark:bg-gray-700 dark:border-gray-600"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
+        <form onSubmit={handleLogin} className="space-y-4">
+          <Input
+            id="username"
+            name="username"
+            label="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
 
-        <label className="text-sm text-gray-600 dark:text-gray-300">
-          Password
-        </label>
-        <input
-          type="password"
-          className="w-full mt-1 mb-4 px-3 py-2 rounded border dark:bg-gray-700 dark:border-gray-600"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          <Input
+            id="password"
+            name="password"
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-        <button className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
-          Login
-        </button>
-      </form>
+          <Button
+            variant="primary"
+            className="w-full"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Logging in..." : "Login"}
+          </Button>
+        </form>
+      </div>
     </div>
   );
-}
+};
+
+export default LoginPage;
