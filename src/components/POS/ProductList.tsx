@@ -37,9 +37,12 @@ const ProductList: React.FC = () => {
     });
   };
 
+  // Put "Semua" as first chip
+  const chips = ["", ...categories];
+
   return (
     <div className="h-full flex flex-col">
-      {/* Sticky Search + Filter (compact for mobile) */}
+      {/* Sticky Search + Category Chips */}
       <div
         className="
           sticky top-0 z-10
@@ -47,45 +50,54 @@ const ProductList: React.FC = () => {
           p-2 rounded-lg shadow-sm mb-2
         "
       >
-        <div className="flex flex-col gap-2">
-          <div className="relative">
-            <Search
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              placeholder="Cari produk..."
-              className="
-                w-full pl-10 pr-3 py-1.5
-                border border-gray-300 dark:border-gray-600 rounded-md
-                bg-gray-50 dark:bg-gray-700
-                text-gray-900 dark:text-gray-100
-                focus:outline-none focus:ring-1 focus:ring-blue-500
-              "
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <select
+        {/* Search row */}
+        <div className="relative">
+          <Search
+            size={18}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            type="text"
+            placeholder="Cari produk..."
             className="
-              w-full pl-3 pr-8 py-1.5
+              w-full pl-10 pr-3 py-1.5
               border border-gray-300 dark:border-gray-600 rounded-md
               bg-gray-50 dark:bg-gray-700
               text-gray-900 dark:text-gray-100
               focus:outline-none focus:ring-1 focus:ring-blue-500
             "
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="">Semua Kategori</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* Chips row (horizontal scroll) */}
+        <div className="mt-2 -mx-2 px-2 overflow-x-auto">
+          <div className="flex gap-2 w-max">
+            {chips.map((cat) => {
+              const isActive = selectedCategory === cat;
+              const label = cat === "" ? "Semua" : cat;
+
+              return (
+                <button
+                  key={label}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`
+                    whitespace-nowrap px-3 py-1.5 rounded-full text-sm font-medium
+                    border transition
+                    ${
+                      isActive
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700"
+                    }
+                    active:scale-[0.98]
+                  `}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
