@@ -75,11 +75,11 @@ function filterTransactions(
 
 // ---------- component ----------
 const Dashboard: React.FC = () => {
-  const { products } = useProducts(); // keep dependency stable
+  const { products } = useProducts();
   const { transactions } = useCart();
 
   // Range state
-  const [range, setRange] = useState<RangeKey>("all"); // default all time
+  const [range, setRange] = useState<RangeKey>("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
@@ -99,27 +99,34 @@ const Dashboard: React.FC = () => {
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
 
   useEffect(() => {
-    // ----- filtered by range (affects totals + charts + recent) -----
+    // ✅ only SUCCESS should affect dashboard
+    const successTxAll = (transactions || []).filter(
+      (t) => (t.status || "SUCCESS") === "SUCCESS"
+    );
+
+    // ----- filtered by range (SUCCESS only) -----
     const filteredTx = filterTransactions(
-      transactions,
+      successTxAll,
       range,
       customStart,
       customEnd
     );
 
-    // Totals (range-based)
+    // Totals (range-based, SUCCESS only)
     const total = filteredTx.reduce((acc, t) => acc + (t.total || 0), 0);
     setTotalSales(total);
     setTotalTransactions(filteredTx.length);
 
-    // Today stats (always today, NOT range-based)
+    // Today stats (SUCCESS only, not range-based)
     const todayStart = startOfToday();
-    const todayTx = transactions.filter((t) => new Date(t.date) >= todayStart);
+    const todayTx = successTxAll.filter(
+      (t) => new Date(t.date) >= todayStart
+    );
     const todayTotal = todayTx.reduce((acc, t) => acc + (t.total || 0), 0);
     setTodaySales(todayTotal);
     setTodayTransactions(todayTx.length);
 
-    // Sales by product (Amount + Quantity) - range-based
+    // Sales by product (Amount + Quantity) - range-based, SUCCESS only
     const amountMap: { [key: string]: number } = {};
     const qtyMap: { [key: string]: number } = {};
 
@@ -127,8 +134,7 @@ const Dashboard: React.FC = () => {
       (tx.items || []).forEach((item: any) => {
         const name = item.name;
         const qty = item.quantity || 0;
-        const amount =
-          item.subtotal || item.price * qty || 0;
+        const amount = item.subtotal || item.price * qty || 0;
 
         if (!amountMap[name]) amountMap[name] = 0;
         if (!qtyMap[name]) qtyMap[name] = 0;
@@ -141,7 +147,7 @@ const Dashboard: React.FC = () => {
     setSalesByProductAmount(amountMap);
     setSalesByProductQty(qtyMap);
 
-    // Recent transactions (range-based)
+    // Recent transactions (range-based, SUCCESS only)
     const recent = [...filteredTx]
       .sort(
         (a, b) =>
@@ -209,7 +215,7 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Stats Cards (4 cards kept) */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Total Penjualan (range-based) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
@@ -228,7 +234,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Penjualan Hari Ini (always today) */}
+        {/* Penjualan Hari Ini (SUCCESS only) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
             <div>
@@ -266,7 +272,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Transaksi Hari Ini (always today) */}
+        {/* Transaksi Hari Ini (SUCCESS only) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
             <div>
@@ -299,7 +305,7 @@ const Dashboard: React.FC = () => {
           {Object.keys(salesByProductAmount).length > 0 ? (
             <div className="space-y-2">
               {Object.entries(salesByProductAmount)
-                .sort((a, b) => b[1] - a[1]) // highest first
+                .sort((a, b) => b[1] - a[1])
                 .map(([name, amount]) => (
                   <div key={name} className="flex items-center">
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mr-2">
@@ -334,7 +340,7 @@ const Dashboard: React.FC = () => {
           {Object.keys(salesByProductQty).length > 0 ? (
             <div className="space-y-2">
               {Object.entries(salesByProductQty)
-                .sort((a, b) => b[1] - a[1]) // highest first
+                .sort((a, b) => b[1] - a[1])
                 .map(([name, qty]) => {
                   const maxQty =
                     Math.max(...Object.values(salesByProductQty)) || 1;
@@ -344,9 +350,7 @@ const Dashboard: React.FC = () => {
                       <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mr-2">
                         <div
                           className="bg-green-600 h-4 rounded-full"
-                          style={{
-                            width: `${(qty / maxQty) * 100}%`,
-                          }}
+                          style={{ width: `${(qty / maxQty) * 100}%` }}
                         />
                       </div>
                       <span className="text-sm whitespace-nowrap">
@@ -363,7 +367,7 @@ const Dashboard: React.FC = () => {
           )}
         </div>
 
-        {/* Recent Transactions (range-based) */}
+        {/* Recent Transactions (SUCCESS only) */}
         <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold mb-4">Transaksi Terbaru</h2>
 
@@ -388,9 +392,12 @@ const Dashboard: React.FC = () => {
                 </thead>
                 <tbody>
                   {recentTransactions.map((transaction) => (
-                    <tr key={transaction.id} className="border-b dark:border-gray-700">
+                    <tr
+                      key={transaction.id}
+                      className="border-b dark:border-gray-700"
+                    >
                       <td className="py-2 px-2 text-sm">
-                        {formatReceiptNumber(transaction.id)}
+                        {transaction.id}
                       </td>
                       <td className="py-2 px-2 text-sm">
                         {new Date(transaction.date).toLocaleDateString("id-ID")}
@@ -418,12 +425,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-
-// Helper function for formatting receipt number
-function formatReceiptNumber(id: string): string {
-  const date = new Date();
-  const year = date.getFullYear().toString().substring(2);
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const day = date.getDate().toString().padStart(2, "0");
-  return `INV/${year}${month}${day}/${id.substring(0, 4).toUpperCase()}`;
-}
