@@ -88,6 +88,38 @@ const Cart: React.FC<{
     }
   };
 
+  const handleCancelCart = async () => {
+  if (cart.length === 0) {
+    clearCart();
+    return;
+  }
+
+  const transaction = {
+    items: [...cart],
+    subtotal,
+    discount: 0,
+    total,
+    date: new Date().toISOString(),
+    paymentMethod: "cancelled",
+    cashReceived: 0,
+    change: 0,
+    customerName,
+    note,
+    status: "CANCELLED",
+  };
+
+  try {
+    await addTransaction(transaction);  // will save + clearCart()
+    if (onCloseDrawer) onCloseDrawer();
+    setCustomerName("");
+    setNote("");
+    alert("Cart dibatalkan dan tersimpan di riwayat.");
+  } catch (e) {
+    console.error(e);
+    alert("Gagal menyimpan pembatalan.");
+  }
+};
+
   if (cart.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 p-4">
@@ -175,7 +207,7 @@ const Cart: React.FC<{
   </div>
 
   <div className="grid grid-cols-2 gap-2 mt-4">
-    <Button variant="secondary" className="w-full" onClick={clearCart}>
+    <Button variant="secondary" className="w-full" onClick={handleCancelCart}>
       Batal
     </Button>
 
@@ -194,7 +226,7 @@ const Cart: React.FC<{
     </div>
 
     <div className="grid grid-cols-2 gap-2">
-      <Button variant="secondary" className="w-full" onClick={clearCart}>
+      <Button variant="secondary" className="w-full" onClick={handleCancelCart}>
         Batal
       </Button>
 
