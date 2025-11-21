@@ -11,12 +11,30 @@ export async function fetchTransactionsOnline(): Promise<Transaction[]> {
     console.error("Failed fetching transactions", res.status);
     return [];
   }
-  return await res.json();
+
+  const data = await res.json();
+
+  // normalize minimal (optional but safe)
+  return (data as any[]).map((t) => ({
+    ...t,
+    id: String(t.id),
+    subtotal: Number(t.subtotal ?? 0),
+    discount: Number(t.discount ?? 0),
+    total: Number(t.total ?? 0),
+    status: t.status || "SUCCESS",
+    items: (t.items || []).map((it: any) => ({
+      ...it,
+      productId: String(it.productId ?? ""),
+      price: Number(it.price ?? 0),
+      quantity: Number(it.quantity ?? 0),
+      subtotal: Number(it.subtotal ?? 0),
+    })),
+  })) as Transaction[];
 }
 
 export async function saveTransactionOnline(
-  transaction: Transaction
-): Promise<{ success: boolean }> {
+  transaction: Omit<Transaction, "id"> // ✅ force backend-generated ID
+): Promise<{ success: boolean; id: string }> {
   const res = await fetch(`${API_URL}/api/transactions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -27,7 +45,7 @@ export async function saveTransactionOnline(
     throw new Error("Failed saving transaction");
   }
 
-  return await res.json();
+  return await res.json(); // { success, id }
 }
 
 /* ============ PRODUCTS ============ */
@@ -42,7 +60,6 @@ export async function fetchProductsOnline(): Promise<Product[]> {
 
   const data = await res.json();
 
-  // Normalise ID to string & numeric fields
   return (data as any[]).map((p) => ({
     id: String(p.id),
     name: p.name,
