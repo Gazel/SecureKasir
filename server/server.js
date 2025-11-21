@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+import dotenv from ".env";
 dotenv.config();
 
 import express from "express";
