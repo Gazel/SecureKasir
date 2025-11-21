@@ -57,6 +57,7 @@ const Cart: React.FC = () => {
     setCashReceived("");
     setCustomerName("");
     setNote("");
+    setDiscount(0);
 
     alert("Transaksi berhasil disimpan!");
   } catch (error) {
