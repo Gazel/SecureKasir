@@ -1,69 +1,53 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Product } from "../types";
-import { generateId } from "../utils/formatter";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect
+} from "react";
+import type { Product } from "../types";
 import {
   fetchProductsOnline,
   createProductOnline,
   updateProductOnline,
-  deleteProductOnline,
+  deleteProductOnline
 } from "../services/apiBackend";
 
 interface ProductContextProps {
   products: Product[];
   categories: string[];
-  addProduct: (product: Omit<Product, "id">) => void;
-  updateProduct: (product: Product) => void;
-  deleteProduct: (productId: string) => void;
+  addProduct: (product: Omit<Product, "id">) => Promise<void>;
+  updateProduct: (id: string, product: Omit<Product, "id">) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  getProductById: (id: string) => Product | undefined;
   reloadProducts: () => Promise<void>;
 }
 
-const ProductContext = createContext<ProductContextProps | undefined>(undefined);
+const ProductContext = createContext<ProductContextProps | undefined>(
+  undefined
+);
 
-// optional: default seeding pertama kali kalau backend masih kosong
-const defaultProducts: Omit<Product, "id">[] = [
-  {
-    name: "Ayam Katsu Original",
-    price: 20000,
-    image: "https://via.placeholder.com/300x150?text=Katsu+Original",
-    category: "Makanan",
-    stock: 99,
-  },
-  {
-    name: "Ayam Katsu Spicy",
-    price: 22000,
-    image: "https://via.placeholder.com/300x150?text=Katsu+Spicy",
-    category: "Makanan",
-    stock: 99,
-  },
-];
-
-export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
+  children
+}) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
 
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    products.forEach((p) => {
-      if (p.category) set.add(p.category);
-    });
-    return Array.from(set);
-  }, [products]);
+  const recalcCategories = (list: Product[]) => {
+    const cats = Array.from(
+      new Set(
+        list
+          .map((p) => p.category)
+          .filter((c): c is string => !!c && c.trim() !== "")
+      )
+    ).sort();
+    setCategories(cats);
+  };
 
   const reloadProducts = async () => {
     try {
-      let data = await fetchProductsOnline();
-
-      // kalau kosong total, seed defaultProducts sekali
-      if (!data || data.length === 0) {
-        const seeded: Product[] = [];
-        for (const base of defaultProducts) {
-          const newProduct: Product = { ...base, id: generateId() };
-          await createProductOnline(newProduct);
-          seeded.push(newProduct);
-        }
-        data = seeded;
-      }
-
+      const data = await fetchProductsOnline();
       setProducts(data);
+      recalcCategories(data);
     } catch (err) {
       console.error("Failed to reload products", err);
     }
@@ -73,49 +57,29 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     reloadProducts();
   }, []);
 
-  const addProduct = (product: Omit<Product, "id">) => {
-    const newProduct: Product = {
-      ...product,
-      id: generateId(),
-    };
-
-    // optimistik: update UI dulu
-    setProducts((prev) => [...prev, newProduct]);
-
-    (async () => {
-      try {
-        await createProductOnline(newProduct);
-      } catch (err) {
-        console.error("Failed to save product online", err);
-      }
-    })();
+  const addProduct = async (product: Omit<Product, "id">) => {
+    const saved = await createProductOnline(product);
+    const updated = [...products, saved];
+    setProducts(updated);
+    recalcCategories(updated);
   };
 
-  const updateProduct = (product: Product) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, ...product } : p))
-    );
-
-    (async () => {
-      try {
-        await updateProductOnline(product);
-      } catch (err) {
-        console.error("Failed to update product online", err);
-      }
-    })();
+  const updateProduct = async (id: string, product: Omit<Product, "id">) => {
+    const saved = await updateProductOnline(id, product);
+    const updated = products.map((p) => (p.id === id ? saved : p));
+    setProducts(updated);
+    recalcCategories(updated);
   };
 
-  const deleteProduct = (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
-
-    (async () => {
-      try {
-        await deleteProductOnline(productId);
-      } catch (err) {
-        console.error("Failed to delete product online", err);
-      }
-    })();
+  const deleteProduct = async (id: string) => {
+    await deleteProductOnline(id);
+    const updated = products.filter((p) => p.id !== id);
+    setProducts(updated);
+    recalcCategories(updated);
   };
+
+  const getProductById = (id: string) =>
+    products.find((p) => p.id === id);
 
   return (
     <ProductContext.Provider
@@ -125,7 +89,8 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addProduct,
         updateProduct,
         deleteProduct,
-        reloadProducts,
+        getProductById,
+        reloadProducts
       }}
     >
       {children}
@@ -134,9 +99,9 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 };
 
 export const useProducts = () => {
-  const context = useContext(ProductContext);
-  if (!context) {
+  const ctx = useContext(ProductContext);
+  if (!ctx) {
     throw new Error("useProducts must be used within a ProductProvider");
   }
-  return context;
+  return ctx;
 };
