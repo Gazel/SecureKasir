@@ -101,7 +101,29 @@ const ProductList: React.FC = () => {
         </div>
       </div>
 
-      const ProductRow: React.FC<{
+      {/* Products List (image-less, mobile-first) */}
+      <div className="flex-1 overflow-y-auto pb-24">
+        {filteredProducts.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+            <p>Tidak ada produk yang ditemukan</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {filteredProducts.map((product) => (
+              <ProductRow
+                key={product.id}
+                product={product}
+                onAdd={handleAddToCart}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ProductRow: React.FC<{
   product: any;
   onAdd: (p: any) => void;
 }> = ({ product, onAdd }) => {
@@ -117,7 +139,7 @@ const ProductList: React.FC = () => {
       "
     >
       {/* No image — simple colored dot */}
-      <div className="h-4 w-4 rounded-full bg-blue-400 dark:bg-blue-600 flex-shrink-0"></div>
+      <div className="h-4 w-4 rounded-full bg-blue-400 dark:bg-blue-600 flex-shrink-0" />
 
       {/* Name + category */}
       <div className="flex-1 text-left min-w-0">
