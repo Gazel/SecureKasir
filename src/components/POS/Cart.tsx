@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useCart } from "../../contexts/CartContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { formatCurrency } from "../../utils/formatter";
 import Button from "../UI/Button";
 import Input from "../UI/Input";
@@ -22,6 +23,7 @@ const Cart: React.FC<{
     calculateTotal,
   } = useCart();
 
+  const { token } = useAuth(); // ✅ token from login
   const { isOpen, openModal, closeModal } = useModal();
 
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -31,7 +33,7 @@ const Cart: React.FC<{
 
   const { subtotal, total } = calculateTotal();
 
-  // Force discount always 0 in POS (no UI needed)
+  // Force discount always 0 in POS
   useEffect(() => {
     if (discount !== 0) setDiscount(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -39,6 +41,22 @@ const Cart: React.FC<{
 
   const handleQuantityChange = (productId: string, quantity: number) => {
     if (quantity >= 1) updateQuantity(productId, quantity);
+  };
+
+  // ✅ Safe wrapper so works with old or new CartContext signature
+  const safeAddTransaction = async (trx: any) => {
+    if (!token) {
+      alert("Session login habis / belum login. Silakan login lagi.");
+      throw new Error("No token");
+    }
+
+    // if CartContext updated to accept (trx, token)
+    if ((addTransaction as any).length >= 2) {
+      return (addTransaction as any)(trx, token);
+    }
+
+    // fallback old signature (trx only)
+    return (addTransaction as any)(trx);
   };
 
   const handlePayment = async () => {
@@ -59,7 +77,7 @@ const Cart: React.FC<{
 
     const transaction = {
       items: [...cart],
-      subtotal, // keep sending for backend compatibility
+      subtotal,
       discount: safeDiscount,
       total,
       date: new Date().toISOString(),
@@ -68,14 +86,14 @@ const Cart: React.FC<{
       change: paymentMethod === "cash" ? cashAmount - total : 0,
       customerName,
       note,
+      status: "SUCCESS",
     };
 
     try {
-      await addTransaction(transaction);
+      await safeAddTransaction(transaction); // ✅ use wrapper
       closeModal();
-      if (onCloseDrawer) onCloseDrawer(); // ✅ auto close drawer after success
+      if (onCloseDrawer) onCloseDrawer();
 
-      // reset fields
       setCashReceived("");
       setCustomerName("");
       setNote("");
@@ -89,36 +107,36 @@ const Cart: React.FC<{
   };
 
   const handleCancelCart = async () => {
-  if (cart.length === 0) {
-    clearCart();
-    return;
-  }
+    if (cart.length === 0) {
+      clearCart();
+      return;
+    }
 
-  const transaction = {
-    items: [...cart],
-    subtotal,
-    discount: 0,
-    total,
-    date: new Date().toISOString(),
-    paymentMethod: "cancelled",
-    cashReceived: 0,
-    change: 0,
-    customerName,
-    note,
-    status: "CANCELLED",
+    const transaction = {
+      items: [...cart],
+      subtotal,
+      discount: 0,
+      total,
+      date: new Date().toISOString(),
+      paymentMethod: "cancelled",
+      cashReceived: 0,
+      change: 0,
+      customerName,
+      note,
+      status: "CANCELLED",
+    };
+
+    try {
+      await safeAddTransaction(transaction); // ✅ use wrapper
+      if (onCloseDrawer) onCloseDrawer();
+      setCustomerName("");
+      setNote("");
+      alert("Cart dibatalkan dan tersimpan di riwayat.");
+    } catch (e) {
+      console.error(e);
+      alert("Gagal menyimpan pembatalan.");
+    }
   };
-
-  try {
-    await addTransaction(transaction);  // will save + clearCart()
-    if (onCloseDrawer) onCloseDrawer();
-    setCustomerName("");
-    setNote("");
-    alert("Cart dibatalkan dan tersimpan di riwayat.");
-  } catch (e) {
-    console.error(e);
-    alert("Gagal menyimpan pembatalan.");
-  }
-};
 
   if (cart.length === 0) {
     return (
@@ -147,7 +165,11 @@ const Cart: React.FC<{
   return (
     <div className="h-full flex flex-col">
       {/* Cart Items */}
-      <div className={`flex-1 overflow-y-auto ${embeddedInDrawer ? "pb-4" : "pb-24"}`}>
+      <div
+        className={`flex-1 overflow-y-auto ${
+          embeddedInDrawer ? "pb-4" : "pb-24"
+        }`}
+      >
         <div className="space-y-3 p-1">
           {cart.map((item) => (
             <div
@@ -197,71 +219,67 @@ const Cart: React.FC<{
         </div>
       </div>
 
-      {/* ACTIONS AREA */}
+      {/* Desktop Summary */}
+      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700 mt-4">
+        <div className="border-t pt-2 flex justify-between items-center font-medium text-lg">
+          <span>Total:</span>
+          <span>{formatCurrency(total)}</span>
+        </div>
 
-{/* Desktop Summary (only desktop) */}
-<div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700 mt-4">
-  <div className="border-t pt-2 flex justify-between items-center font-medium text-lg">
-    <span>Total:</span>
-    <span>{formatCurrency(total)}</span>
-  </div>
-
-  <div className="grid grid-cols-2 gap-2 mt-4">
-    <Button variant="secondary" className="w-full" onClick={handleCancelCart}>
-      Batal
-    </Button>
-
-    <Button variant="primary" className="w-full" onClick={openModal}>
-      Bayar
-    </Button>
-  </div>
-</div>
-
-{/* Mobile Drawer Footer (only when embeddedInDrawer) */}
-{embeddedInDrawer && (
-  <div className="md:hidden sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-sm text-gray-600 dark:text-gray-300">Total</span>
-      <span className="text-lg font-bold">{formatCurrency(total)}</span>
-    </div>
-
-    <div className="grid grid-cols-2 gap-2">
-      <Button variant="secondary" className="w-full" onClick={handleCancelCart}>
-        Batal
-      </Button>
-
-      <Button variant="primary" className="w-full" onClick={openModal}>
-        Bayar
-      </Button>
-    </div>
-  </div>
-)}
-
-{/* Mobile Sticky Bar (only when NOT embeddedInDrawer) */}
-{!embeddedInDrawer && (
-  <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2">
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex-1">
-        <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
-        <div className="text-lg font-bold">{formatCurrency(total)}</div>
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <Button variant="secondary" className="w-full" onClick={handleCancelCart}>
+            Batal
+          </Button>
+          <Button variant="primary" className="w-full" onClick={openModal}>
+            Bayar
+          </Button>
+        </div>
       </div>
 
-      <button
-        onClick={openModal}
-        disabled={cart.length === 0}
-        className="
-          flex-shrink-0
-          px-5 py-3 rounded-xl
-          bg-blue-600 text-white font-semibold
-          disabled:opacity-50 disabled:cursor-not-allowed
-          active:scale-[0.98]
-        "
-      >
-        Bayar
-      </button>
-    </div>
-  </div>
-)}
+      {/* Mobile Drawer Footer */}
+      {embeddedInDrawer && (
+        <div className="md:hidden sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-gray-600 dark:text-gray-300">Total</span>
+            <span className="text-lg font-bold">{formatCurrency(total)}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" className="w-full" onClick={handleCancelCart}>
+              Batal
+            </Button>
+            <Button variant="primary" className="w-full" onClick={openModal}>
+              Bayar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Sticky Bar */}
+      {!embeddedInDrawer && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
+              <div className="text-lg font-bold">{formatCurrency(total)}</div>
+            </div>
+
+            <button
+              onClick={openModal}
+              disabled={cart.length === 0}
+              className="
+                flex-shrink-0
+                px-5 py-3 rounded-xl
+                bg-blue-600 text-white font-semibold
+                disabled:opacity-50 disabled:cursor-not-allowed
+                active:scale-[0.98]
+              "
+            >
+              Bayar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Checkout Modal */}
       <Modal
@@ -284,6 +302,7 @@ const Cart: React.FC<{
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Metode Pembayaran
             </label>
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 className={`py-2 px-4 border rounded-md ${
@@ -295,6 +314,7 @@ const Cart: React.FC<{
               >
                 Tunai
               </button>
+
               <button
                 className={`py-2 px-4 border rounded-md ${
                   paymentMethod === "qris"
@@ -347,6 +367,7 @@ const Cart: React.FC<{
 
           <div className="mt-4 bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
             <h3 className="font-medium mb-2">Ringkasan Transaksi</h3>
+
             <div className="space-y-1 text-sm mb-2">
               {cart.map((item) => (
                 <div key={item.productId} className="flex justify-between">
@@ -357,6 +378,7 @@ const Cart: React.FC<{
                 </div>
               ))}
             </div>
+
             <div className="border-t pt-2 flex justify-between">
               <span className="font-medium">Total:</span>
               <span className="font-medium">{formatCurrency(total)}</span>
