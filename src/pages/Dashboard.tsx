@@ -11,78 +11,126 @@ import { useProducts } from "../contexts/ProductContext";
 import { useCart } from "../contexts/CartContext";
 import { formatCurrency } from "../utils/formatter";
 
-// Time range helper
-function filterByRange(transactions: any[], range: string) {
-  const now = new Date();
-  const start = new Date();
-
-  if (range === "today") {
-    start.setHours(0, 0, 0, 0);
-  } else if (range === "week") {
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    start.setDate(diff);
-    start.setHours(0, 0, 0, 0);
-  } else if (range === "month") {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  } else if (range === "year") {
-    start.setMonth(0, 1);
-    start.setHours(0, 0, 0, 0);
-  }
-
-  return transactions.filter((t) => new Date(t.date) >= start);
+// ---------- helpers ----------
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
+function startOfWeek() {
+  const now = new Date();
+  const d = new Date(now);
+  const day = d.getDay(); // 0 Sun .. 6 Sat
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday start
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfMonth() {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+type RangeKey = "all" | "today" | "week" | "month" | "custom";
+
+function filterTransactions(
+  transactions: any[],
+  range: RangeKey,
+  customStart?: string,
+  customEnd?: string
+) {
+  if (range === "all") return transactions;
+
+  let start: Date | null = null;
+  let end: Date | null = null;
+
+  if (range === "today") {
+    start = startOfToday();
+  } else if (range === "week") {
+    start = startOfWeek();
+  } else if (range === "month") {
+    start = startOfMonth();
+  } else if (range === "custom") {
+    if (customStart) {
+      start = new Date(customStart);
+      start.setHours(0, 0, 0, 0);
+    }
+    if (customEnd) {
+      end = new Date(customEnd);
+      end.setHours(23, 59, 59, 999);
+    }
+  }
+
+  return transactions.filter((t) => {
+    const txDate = new Date(t.date);
+    if (start && txDate < start) return false;
+    if (end && txDate > end) return false;
+    return true;
+  });
+}
+
+// ---------- component ----------
 const Dashboard: React.FC = () => {
-  const { products } = useProducts();
+  const { products } = useProducts(); // not used heavily now, but keep for dependency
   const { transactions } = useCart();
 
-  const [range, setRange] = useState("today");
-  const [filtered, setFiltered] = useState<any[]>([]);
-  const [salesByProduct, setSalesByProduct] = useState<any>({});
+  // Range state
+  const [range, setRange] = useState<RangeKey>("all"); // default all time
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
+  // Stats
   const [totalSales, setTotalSales] = useState(0);
+  const [todaySales, setTodaySales] = useState(0);
   const [totalTransactions, setTotalTransactions] = useState(0);
+  const [todayTransactions, setTodayTransactions] = useState(0);
 
+  // Sales by product + recent
+  const [salesByProduct, setSalesByProduct] = useState<{ [key: string]: number }>({});
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
 
   useEffect(() => {
-    // Filtering transactions by selected time range
-    const t = filterByRange(transactions, range);
-    setFiltered(t);
+    // ----- filtered by range -----
+    const filteredTx = filterTransactions(transactions, range, customStart, customEnd);
 
-    // Total Sales
-    const sum = t.reduce((acc, tx) => acc + tx.total, 0);
-    setTotalSales(sum);
+    // Totals (range-based)
+    const total = filteredTx.reduce((acc, t) => acc + (t.total || 0), 0);
+    setTotalSales(total);
+    setTotalTransactions(filteredTx.length);
 
-    // Total Transactions
-    setTotalTransactions(t.length);
+    // Today stats (always today, NOT range-based)
+    const todayStart = startOfToday();
+    const todayTx = transactions.filter((t) => new Date(t.date) >= todayStart);
+    const todayTotal = todayTx.reduce((acc, t) => acc + (t.total || 0), 0);
+    setTodaySales(todayTotal);
+    setTodayTransactions(todayTx.length);
 
-    // Penjualan berdasarkan produk
-    const map: any = {};
-    t.forEach((tx) => {
-      tx.items.forEach((item: any) => {
-        if (!map[item.name]) map[item.name] = 0;
-        map[item.name] += item.subtotal;
+    // Sales by product (range-based)
+    const map: { [key: string]: number } = {};
+    filteredTx.forEach((tx) => {
+      (tx.items || []).forEach((item: any) => {
+        const name = item.name;
+        if (!map[name]) map[name] = 0;
+        map[name] += item.subtotal || item.price * item.quantity || 0;
       });
     });
     setSalesByProduct(map);
 
-    // Recent Transactions
-    const recent = [...t]
-      .sort(
-        (a, b) =>
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-      )
+    // Recent transactions (range-based)
+    const recent = [...filteredTx]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
     setRecentTransactions(recent);
-  }, [transactions, range]);
+  }, [products, transactions, range, customStart, customEnd]);
 
   return (
     <div className="container mx-auto px-4 py-6">
       {/* Header + Range Filter */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
 
         <div className="flex items-center gap-2">
@@ -90,28 +138,56 @@ const Dashboard: React.FC = () => {
           <select
             className="
               px-3 py-2 rounded-md border border-gray-300 
-              dark:border-gray-700 bg-white dark:bg-gray-800
+              dark:border-gray-700 bg-white dark:bg-gray-800 text-sm
             "
             value={range}
-            onChange={(e) => setRange(e.target.value)}
+            onChange={(e) => setRange(e.target.value as RangeKey)}
           >
+            <option value="all">Total (All Time)</option>
             <option value="today">Hari Ini</option>
             <option value="week">Minggu Ini</option>
             <option value="month">Bulan Ini</option>
-            <option value="year">Tahun Ini</option>
+            <option value="custom">Custom Date</option>
           </select>
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Custom range inputs */}
+      {range === "custom" && (
+        <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+              <input
+                type="date"
+                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">End Date</label>
+              <input
+                type="date"
+                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Kosongkan start/end untuk “open range”.
+          </p>
+        </div>
+      )}
+
+      {/* Stats Cards (4 cards kept) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {/* Total Sales */}
+        {/* Total Penjualan (range-based) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Penjualan
-              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Total Penjualan</p>
               <p className="text-2xl font-bold">{formatCurrency(totalSales)}</p>
             </div>
             <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-300">
@@ -120,25 +196,61 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Total Transactions */}
+        {/* Penjualan Hari Ini (always today) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Transaksi
-              </p>
-              <p className="text-2xl font-bold">{totalTransactions}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Penjualan Hari Ini</p>
+              <p className="text-2xl font-bold">{formatCurrency(todaySales)}</p>
+              {todaySales > 0 && (
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
+                  <ArrowUp size={12} className="mr-1" />
+                  {((todaySales / (totalSales || 1)) * 100).toFixed(1)}% dari total
+                </p>
+              )}
             </div>
             <div className="h-12 w-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center text-green-600 dark:text-green-300">
+              <Wallet size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* Total Transaksi (range-based) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Total Transaksi</p>
+              <p className="text-2xl font-bold">{totalTransactions}</p>
+            </div>
+            <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-300">
               <ShoppingBag size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* Transaksi Hari Ini (always today) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Transaksi Hari Ini</p>
+              <p className="text-2xl font-bold">{todayTransactions}</p>
+              {todayTransactions > 0 && (
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
+                  <ArrowUp size={12} className="mr-1" />
+                  {((todayTransactions / (totalTransactions || 1)) * 100).toFixed(1)}% dari total
+                </p>
+              )}
+            </div>
+            <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-300">
+              <PieChart size={24} />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Sales by Product + Recent */}
+      {/* Sales by Product + Recent Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Sales by Product */}
+        {/* Penjualan berdasarkan produk */}
         <div className="lg:col-span-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold mb-4">Penjualan Berdasarkan Produk</h2>
 
@@ -150,9 +262,9 @@ const Dashboard: React.FC = () => {
                     <div
                       className="bg-blue-600 h-4 rounded-full"
                       style={{
-                        width: `${(amount / totalSales) * 100}%`,
+                        width: `${totalSales > 0 ? (amount / totalSales) * 100 : 0}%`,
                       }}
-                    ></div>
+                    />
                   </div>
                   <span className="text-sm whitespace-nowrap">
                     {name} ({formatCurrency(amount)})
@@ -162,49 +274,42 @@ const Dashboard: React.FC = () => {
             </div>
           ) : (
             <p className="text-gray-500 dark:text-gray-400 text-center">
-              Tidak ada penjualan
+              Tidak ada penjualan di range ini
             </p>
           )}
         </div>
 
         {/* Recent Transactions */}
         <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold mb-4">
-            Transaksi Terbaru
-          </h2>
+          <h2 className="text-lg font-semibold mb-4">Transaksi Terbaru</h2>
 
           {recentTransactions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
                   <tr className="border-b dark:border-gray-700">
-                    <th className="py-2 px-3 text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       ID
                     </th>
-                    <th className="py-2 px-3 text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Tanggal
                     </th>
-                    <th className="py-2 px-3 text-left text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Item
                     </th>
-                    <th className="py-2 px-3 text-right text-xs text-gray-500 dark:text-gray-400 uppercase">
+                    <th className="py-2 px-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Total
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentTransactions.map((transaction) => (
-                    <tr
-                      key={transaction.id}
-                      className="border-b dark:border-gray-700"
-                    >
+                    <tr key={transaction.id} className="border-b dark:border-gray-700">
                       <td className="py-2 px-3 text-sm">
                         {formatReceiptNumber(transaction.id)}
                       </td>
                       <td className="py-2 px-3 text-sm">
-                        {new Date(transaction.date).toLocaleDateString(
-                          "id-ID"
-                        )}
+                        {new Date(transaction.date).toLocaleDateString("id-ID")}
                       </td>
                       <td className="py-2 px-3 text-sm">
                         {transaction.items.length} item
@@ -219,7 +324,7 @@ const Dashboard: React.FC = () => {
             </div>
           ) : (
             <p className="text-gray-500 dark:text-gray-400 text-center">
-              Belum ada transaksi
+              Belum ada transaksi di range ini
             </p>
           )}
         </div>
@@ -230,11 +335,11 @@ const Dashboard: React.FC = () => {
 
 export default Dashboard;
 
-// Helper ID formatter
+// Helper function for formatting receipt number
 function formatReceiptNumber(id: string): string {
   const date = new Date();
-  const y = date.getFullYear().toString().slice(-2);
-  const m = (date.getMonth() + 1).toString().padStart(2, "0");
-  const d = date.getDate().toString().padStart(2, "0");
-  return `INV/${y}${m}${d}/${id.slice(0, 4).toUpperCase()}`;
+  const year = date.getFullYear().toString().substring(2);
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `INV/${year}${month}${day}/${id.substring(0, 4).toUpperCase()}`;
 }
