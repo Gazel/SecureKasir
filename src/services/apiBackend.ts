@@ -158,3 +158,95 @@ export async function deleteProductOnline(
     throw new Error("Failed deleting product");
   }
 }
+/* ============ USERS (ADMIN ONLY) ============ */
+
+export type UserRole = "admin" | "cashier";
+
+export interface UserRow {
+  id: string;
+  username: string;
+  full_name?: string;
+  role: UserRole;
+  created_at?: string;
+}
+
+export async function fetchUsersOnline(token: string): Promise<UserRow[]> {
+  const res = await fetch(`${API_URL}/api/users`, {
+    headers: authHeader(token),
+  });
+
+  if (!res.ok) {
+    console.error("Failed fetching users", res.status);
+    return [];
+  }
+
+  const data = await res.json();
+  return (data as any[]).map((u) => ({
+    id: String(u.id),
+    username: u.username,
+    full_name: u.full_name ?? "",
+    role: u.role as UserRole,
+    created_at: u.created_at,
+  }));
+}
+
+export async function createUserOnline(
+  payload: { username: string; password: string; full_name?: string; role: UserRole },
+  token: string
+): Promise<UserRow> {
+  const res = await fetch(`${API_URL}/api/users`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) throw new Error("Failed creating user");
+
+  const u = await res.json();
+  return {
+    id: String(u.id),
+    username: u.username,
+    full_name: u.full_name ?? "",
+    role: u.role as UserRole,
+    created_at: u.created_at,
+  };
+}
+
+export async function updateUserOnline(
+  id: string,
+  payload: { username?: string; password?: string; full_name?: string; role?: UserRole },
+  token: string
+): Promise<UserRow> {
+  const res = await fetch(`${API_URL}/api/users/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) throw new Error("Failed updating user");
+
+  const u = await res.json();
+  return {
+    id: String(u.id),
+    username: u.username,
+    full_name: u.full_name ?? "",
+    role: u.role as UserRole,
+    created_at: u.created_at,
+  };
+}
+
+export async function deleteUserOnline(id: string, token: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/users/${id}`, {
+    method: "DELETE",
+    headers: authHeader(token),
+  });
+
+  if (!res.ok) throw new Error("Failed deleting user");
+}
+
