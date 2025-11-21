@@ -165,51 +165,71 @@ const Cart: React.FC<{
         </div>
       </div>
 
-      {/* Desktop Summary (clean, no subtotal/discount) */}
-      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700 mt-4">
-        <div className="border-t pt-2 flex justify-between items-center font-medium text-lg">
-          <span>Total:</span>
-          <span>{formatCurrency(total)}</span>
-        </div>
+      {/* ACTIONS AREA */}
 
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <Button variant="secondary" className="w-full" onClick={clearCart}>
-            Batal
-          </Button>
+{/* Desktop Summary (only desktop) */}
+<div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700 mt-4">
+  <div className="border-t pt-2 flex justify-between items-center font-medium text-lg">
+    <span>Total:</span>
+    <span>{formatCurrency(total)}</span>
+  </div>
 
-          <Button variant="primary" className="w-full" onClick={openModal}>
-            Bayar
-          </Button>
-        </div>
+  <div className="grid grid-cols-2 gap-2 mt-4">
+    <Button variant="secondary" className="w-full" onClick={clearCart}>
+      Batal
+    </Button>
+
+    <Button variant="primary" className="w-full" onClick={openModal}>
+      Bayar
+    </Button>
+  </div>
+</div>
+
+{/* Mobile Drawer Footer (only when embeddedInDrawer) */}
+{embeddedInDrawer && (
+  <div className="md:hidden sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-sm text-gray-600 dark:text-gray-300">Total</span>
+      <span className="text-lg font-bold">{formatCurrency(total)}</span>
+    </div>
+
+    <div className="grid grid-cols-2 gap-2">
+      <Button variant="secondary" className="w-full" onClick={clearCart}>
+        Batal
+      </Button>
+
+      <Button variant="primary" className="w-full" onClick={openModal}>
+        Bayar
+      </Button>
+    </div>
+  </div>
+)}
+
+{/* Mobile Sticky Bar (only when NOT embeddedInDrawer) */}
+{!embeddedInDrawer && (
+  <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2">
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex-1">
+        <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
+        <div className="text-lg font-bold">{formatCurrency(total)}</div>
       </div>
 
-      {/* Sticky Bottom Checkout Bar (mobile only, disabled in drawer) */}
-      {!embeddedInDrawer && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-3 py-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex-1">
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Total
-              </div>
-              <div className="text-lg font-bold">{formatCurrency(total)}</div>
-            </div>
-
-            <button
-              onClick={openModal}
-              disabled={cart.length === 0}
-              className="
-                flex-shrink-0
-                px-5 py-3 rounded-xl
-                bg-blue-600 text-white font-semibold
-                disabled:opacity-50 disabled:cursor-not-allowed
-                active:scale-[0.98]
-              "
-            >
-              Bayar
-            </button>
-          </div>
-        </div>
-      )}
+      <button
+        onClick={openModal}
+        disabled={cart.length === 0}
+        className="
+          flex-shrink-0
+          px-5 py-3 rounded-xl
+          bg-blue-600 text-white font-semibold
+          disabled:opacity-50 disabled:cursor-not-allowed
+          active:scale-[0.98]
+        "
+      >
+        Bayar
+      </button>
+    </div>
+  </div>
+)}
 
       {/* Checkout Modal */}
       <Modal
