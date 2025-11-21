@@ -25,4 +25,6 @@ export interface Transaction {
   paymentMethod: string;
   cashReceived: number;
   change: number;
+  customerName?: string;
+  note?: string;
 }
