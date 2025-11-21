@@ -12,9 +12,10 @@ export interface AuthUser {
 interface AuthContextProps {
   token: string | null;
   user: AuthUser | null;
+  isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
-  isLoading: boolean;
+  hasRole: (...roles: UserRole[]) => boolean;   // ✅ ADD
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -26,13 +27,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // load from localStorage on boot
+  // Load saved session
   useEffect(() => {
     const savedToken = localStorage.getItem("sk_token");
     const savedUser = localStorage.getItem("sk_user");
 
-    if (savedToken) setToken(savedToken);
-    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem("sk_user");
+      }
+    }
+
     setIsLoading(false);
   }, []);
 
@@ -44,11 +52,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!res.ok) {
-      throw new Error("Invalid credentials");
+      const msg = (await res.json().catch(() => null))?.message;
+      throw new Error(msg || "Login failed");
     }
 
-    const data = await res.json(); // { token, user }
-
+    const data = await res.json();
     setToken(data.token);
     setUser(data.user);
 
@@ -63,8 +71,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("sk_user");
   };
 
+  // ✅ helper for checking roles in UI
+  const hasRole = (...roles: UserRole[]) => {
+    if (!user) return false;
+    return roles.includes(user.role);
+  };
+
   return (
-    <AuthContext.Provider value={{ token, user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ token, user, login, logout, isLoading, hasRole }}>
       {children}
     </AuthContext.Provider>
   );
