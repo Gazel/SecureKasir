@@ -1,287 +1,161 @@
-// server/server.js
 import express from "express";
 import cors from "cors";
 import mysql from "mysql2/promise";
-
-const PORT = process.env.PORT || 4000;
-
-// Basic DB config (bisa di-override pakai ENV di VPS)
-const dbConfig = {
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  multipleStatements: true
-};
-
-let pool;
-
-// Auto create DB + tables
-async function initDb() {
-  const connection = await mysql.createConnection(dbConfig);
-
-  // 1) Create database
-  await connection.query(`
-    CREATE DATABASE IF NOT EXISTS securekasir
-      CHARACTER SET utf8mb4
-      COLLATE utf8mb4_unicode_ci
-  `);
-
-  // 2) Use DB
-  await connection.query(`USE securekasir`);
-
-  // 3) Transactions table
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id VARCHAR(64) PRIMARY KEY,
-      items JSON NOT NULL,
-      subtotal INT NOT NULL,
-      discount INT NOT NULL,
-      total INT NOT NULL,
-      date DATETIME NOT NULL,
-      payment_method VARCHAR(10) NOT NULL,
-      cash_received INT NOT NULL,
-      change_amount INT NOT NULL,
-      customer_name VARCHAR(255),
-      note TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // 4) Products table
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS products (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      price INT NOT NULL,
-      category VARCHAR(100),
-      image TEXT,
-      stock INT DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  await connection.end();
-
-  // 5) Create pooled connection for app
-  pool = mysql.createPool({
-    ...dbConfig,
-    database: "securekasir",
-    connectionLimit: 10
-  });
-
-  console.log("✅ Database & tables ready");
-}
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Simple logger
-app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
+// ⚡ Database Connection Pool
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASS || "",
+  database: process.env.DB_NAME || "securekasir",
+  waitForConnections: true,
+  connectionLimit: 10,
 });
 
-// Health check
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", time: new Date().toISOString() });
-});
+// --------------------------------------------------------
+// 📦 AUTO CREATE TABLES (Runs at Startup)
+// --------------------------------------------------------
+async function initDatabase() {
+  console.log("🔄 Checking database tables...");
 
-/* =========================
-   TRANSACTIONS ENDPOINTS
-   ========================= */
-
-app.get("/api/transactions", async (_req, res) => {
-  try {
-    const [rows] = await pool.query(
-      "SELECT * FROM transactions ORDER BY date DESC"
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id VARCHAR(50) PRIMARY KEY,
+      subtotal INT NOT NULL,
+      discount INT NOT NULL,
+      total INT NOT NULL,
+      date DATETIME NOT NULL,
+      payment_method VARCHAR(20) NOT NULL,
+      cash_received INT,
+      change_amount INT,
+      customer_name VARCHAR(100),
+      note TEXT
     );
+  `);
 
-    const data = rows.map((row) => ({
-      id: row.id,
-      items: JSON.parse(row.items),
-      subtotal: row.subtotal,
-      discount: row.discount,
-      total: row.total,
-      date: row.date instanceof Date ? row.date.toISOString() : row.date,
-      paymentMethod: row.payment_method,
-      cashReceived: row.cash_received,
-      change: row.change_amount,
-      customerName: row.customer_name || "",
-      note: row.note || ""
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS transaction_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      transaction_id VARCHAR(50),
+      product_id VARCHAR(50),
+      name VARCHAR(255),
+      price INT NOT NULL,
+      quantity INT NOT NULL,
+      subtotal INT NOT NULL,
+      FOREIGN KEY (transaction_id)
+        REFERENCES transactions(id)
+        ON DELETE CASCADE
+    );
+  `);
+
+  console.log("✅ Database ready (tables exist)");
+}
+
+// --------------------------------------------------------
+// 📌 GET ALL TRANSACTIONS
+// --------------------------------------------------------
+app.get("/api/transactions", async (req, res) => {
+  try {
+    const [trxRows] = await pool.query("SELECT * FROM transactions ORDER BY date DESC");
+
+    const [itemRows] = await pool.query("SELECT * FROM transaction_items");
+
+    // Assemble into nested structure
+    const result = trxRows.map((trx) => ({
+      ...trx,
+      items: itemRows.filter((item) => item.transaction_id === trx.id),
     }));
 
-    res.json(data);
-  } catch (err) {
-    console.error("Error fetching transactions", err);
-    res.status(500).json({ error: "Failed to fetch transactions" });
+    res.json(result);
+  } catch (error) {
+    console.error("Error loading transactions:", error);
+    res.status(500).json({ error: "Failed to load transactions" });
   }
 });
 
+// --------------------------------------------------------
+// 📌 SAVE TRANSACTION (TRANSACTION + ITEMS)
+// --------------------------------------------------------
 app.post("/api/transactions", async (req, res) => {
+  const {
+    id,
+    items,
+    subtotal,
+    discount,
+    total,
+    date,
+    paymentMethod,
+    cashReceived,
+    change,
+    customerName,
+    note,
+  } = req.body;
+
   try {
-    const {
-      id,
-      items,
-      subtotal,
-      discount,
-      total,
-      date,
-      paymentMethod,
-      cashReceived,
-      change,
-      customerName,
-      note
-    } = req.body;
-
-    if (!id || !Array.isArray(items)) {
-      return res
-        .status(400)
-        .json({ error: "Invalid transaction payload (id/items missing)" });
-    }
-
+    // Save transaction
     await pool.query(
       `
       INSERT INTO transactions
-        (id, items, subtotal, discount, total, date, payment_method,
+        (id, subtotal, discount, total, date, payment_method,
          cash_received, change_amount, customer_name, note)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         id,
-        JSON.stringify(items),
-        subtotal ?? 0,
-        discount ?? 0,
-        total ?? 0,
-        new Date(date),
-        paymentMethod || "cash",
-        cashReceived ?? 0,
-        change ?? 0,
+        subtotal,
+        discount,
+        total,
+        date.replace("T", " ").slice(0, 19),
+        paymentMethod,
+        cashReceived,
+        change,
         customerName || null,
-        note || null
+        note || null,
       ]
     );
 
-    res.status(201).json({ success: true });
-  } catch (err) {
-    console.error("Error saving transaction", err);
+    // Save all items
+    for (const item of items) {
+      await pool.query(
+        `
+        INSERT INTO transaction_items
+          (transaction_id, product_id, name, price, quantity, subtotal)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+        [
+          id,
+          item.productId,
+          item.name,
+          item.price,
+          item.quantity,
+          item.subtotal,
+        ]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error saving transaction", error);
     res.status(500).json({ error: "Failed to save transaction" });
   }
 });
 
-/* =====================
-   PRODUCTS ENDPOINTS
-   ===================== */
+// --------------------------------------------------------
+// 🚀 START SERVER
+// --------------------------------------------------------
+const PORT = process.env.PORT || 4000;
 
-// GET all products
-app.get("/api/products", async (_req, res) => {
-  try {
-    const [rows] = await pool.query("SELECT * FROM products ORDER BY name ASC");
-
-    const data = rows.map((row) => ({
-      id: String(row.id),
-      name: row.name,
-      price: row.price,
-      category: row.category || "",
-      image: row.image || "",
-      stock: row.stock ?? 0
-    }));
-
-    res.json(data);
-  } catch (err) {
-    console.error("Error fetching products", err);
-    res.status(500).json({ error: "Failed to fetch products" });
-  }
-});
-
-// CREATE product
-app.post("/api/products", async (req, res) => {
-  try {
-    const { name, price, category, image, stock } = req.body;
-
-    if (!name || price == null) {
-      return res
-        .status(400)
-        .json({ error: "Name and price are required for product" });
-    }
-
-    const [result] = await pool.query(
-      `
-      INSERT INTO products (name, price, category, image, stock)
-      VALUES (?, ?, ?, ?, ?)
-    `,
-      [name, price, category || null, image || null, stock ?? 0]
-    );
-
-    res.status(201).json({
-      id: String(result.insertId),
-      name,
-      price,
-      category: category || "",
-      image: image || "",
-      stock: stock ?? 0
-    });
-  } catch (err) {
-    console.error("Error creating product", err);
-    res.status(500).json({ error: "Failed to create product" });
-  }
-});
-
-// UPDATE product
-app.put("/api/products/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, price, category, image, stock } = req.body;
-
-    if (!name || price == null) {
-      return res
-        .status(400)
-        .json({ error: "Name and price are required for product" });
-    }
-
-    await pool.query(
-      `
-      UPDATE products
-      SET name = ?, price = ?, category = ?, image = ?, stock = ?
-      WHERE id = ?
-    `,
-      [name, price, category || null, image || null, stock ?? 0, id]
-    );
-
-    res.json({
-      id,
-      name,
-      price,
-      category: category || "",
-      image: image || "",
-      stock: stock ?? 0
-    });
-  } catch (err) {
-    console.error("Error updating product", err);
-    res.status(500).json({ error: "Failed to update product" });
-  }
-});
-
-// DELETE product
-app.delete("/api/products/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    await pool.query("DELETE FROM products WHERE id = ?", [id]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Error deleting product", err);
-    res.status(500).json({ error: "Failed to delete product" });
-  }
-});
-
-// Start
-initDb()
+initDatabase()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`🚀 API Server Running on port ${PORT}`);
     });
   })
   .catch((err) => {
-    console.error("❌ Failed to init DB", err);
+    console.error("❌ Failed to initialize database:", err);
     process.exit(1);
   });
