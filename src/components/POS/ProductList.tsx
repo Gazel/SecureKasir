@@ -68,38 +68,84 @@ const ProductList: React.FC = () => {
         </div>
       </div>
       
-      {/* Products Grid */}
-      <div className="flex-1 overflow-y-auto">
-        {filteredProducts.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-            <p>Tidak ada produk yang ditemukan</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {filteredProducts.map((product) => (
-              <div 
-                key={product.id}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700 transition-transform duration-200 hover:shadow-md hover:-translate-y-1 cursor-pointer"
-                onClick={() => handleAddToCart(product)}
-              >
-                <div className="aspect-square relative overflow-hidden">
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white p-2">
-                    <div className="font-medium truncate">{product.name}</div>
-                    <div className="text-sm">{formatCurrency(product.price)}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+     {/* Products List (mobile-first) */}
+<div className="flex-1 overflow-y-auto">
+  {filteredProducts.length === 0 ? (
+    <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+      <p>Tidak ada produk yang ditemukan</p>
+    </div>
+  ) : (
+    <div className="flex flex-col gap-2">
+      {filteredProducts.map((product) => (
+        <ProductRow
+          key={product.id}
+          product={product}
+          onAdd={handleAddToCart}
+        />
+      ))}
+    </div>
+  )}
+</div>
     </div>
   );
 };
+
+const ProductRow: React.FC<{
+  product: any;
+  onAdd: (p: any) => void;
+}> = ({ product, onAdd }) => {
+  return (
+    <button
+      onClick={() => onAdd(product)}
+      className="
+        w-full flex items-center gap-3
+        rounded-xl border border-gray-200 dark:border-gray-700
+        bg-white dark:bg-gray-800
+        px-3 py-3
+        shadow-sm
+        active:scale-[0.99]
+      "
+    >
+      {/* Thumbnail small */}
+      <div className="h-14 w-14 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden flex-shrink-0">
+        {product.image ? (
+          <img
+            src={product.image}
+            alt={product.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full flex items-center justify-center text-xs text-gray-400">
+            No Image
+          </div>
+        )}
+      </div>
+
+      {/* Name + category */}
+      <div className="flex-1 text-left min-w-0">
+        <div className="text-base font-semibold leading-tight truncate">
+          {product.name}
+        </div>
+
+        {product.category && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+            {product.category}
+          </div>
+        )}
+      </div>
+
+      {/* Price */}
+      <div className="text-right">
+        <div className="text-base font-bold text-gray-900 dark:text-gray-100">
+          {formatCurrency(product.price)}
+        </div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+          Tap to add
+        </div>
+      </div>
+    </button>
+  );
+};
+
 
 export default ProductList;
