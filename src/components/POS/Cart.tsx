@@ -24,30 +24,46 @@ const Cart: React.FC = () => {
     }
   };
   
-  const handlePayment = () => {
-    if (cart.length === 0) return;
-    
-    if (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < total)) {
-      alert('Jumlah uang yang diberikan tidak mencukupi');
-      return;
-    }
-    
-    const cashAmount = paymentMethod === 'cash' ? parseFloat(cashReceived) : total;
-    
-    const transaction = {
-      items: [...cart],
-      subtotal,
-      discount,
-      total,
-      date: new Date().toISOString(),
-      paymentMethod,
-      cashReceived: cashAmount,
-      change: paymentMethod === 'cash' ? cashAmount - total : 0
-    };
-    
-    addTransaction(transaction);
-    closeModal();
+  const handlePayment = async () => {
+  if (cart.length === 0) return;
+
+  if (paymentMethod === "cash" && (!cashReceived || parseFloat(cashReceived) < total)) {
+    alert("Jumlah uang yang diberikan tidak mencukupi");
+    return;
+  }
+
+  const cashAmount = paymentMethod === "cash" ? parseFloat(cashReceived) : total;
+
+  const transaction = {
+    items: [...cart],
+    subtotal,
+    discount,
+    total,
+    date: new Date().toISOString(),
+    paymentMethod,
+    cashReceived: cashAmount,
+    change: paymentMethod === "cash" ? cashAmount - total : 0,
+
+    // optional fields
+    customerName,
+    note,
   };
+
+  try {
+    await addTransaction(transaction);   // 🔥 save ONLINE
+    closeModal();
+
+    // reset fields
+    setCashReceived("");
+    setCustomerName("");
+    setNote("");
+
+    alert("Transaksi berhasil disimpan!");
+  } catch (error) {
+    console.error(error);
+    alert("Gagal menyimpan transaksi. Coba lagi.");
+  }
+};
   
   if (cart.length === 0) {
     return (
