@@ -22,12 +22,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
 }) => {
   const { token, user, isLoading } = useAuth();
 
-  if (isLoading) return null; // or loading screen
+  if (isLoading) return null;
   if (!token || !user) return <Navigate to="/login" replace />;
 
   if (roles && !roles.includes(user.role)) {
-    // role not allowed
-    return <Navigate to="/" replace />;
+    // ✅ send cashier to POS, not dashboard
+    return <Navigate to="/pos" replace />;
   }
 
   return <>{children}</>;
