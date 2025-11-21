@@ -1,16 +1,12 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect
-} from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import type { Product } from "../types";
 import {
   fetchProductsOnline,
   createProductOnline,
   updateProductOnline,
-  deleteProductOnline
+  deleteProductOnline,
 } from "../services/apiBackend";
+import { useAuth } from "./AuthContext";
 
 interface ProductContextProps {
   products: Product[];
@@ -22,13 +18,10 @@ interface ProductContextProps {
   reloadProducts: () => Promise<void>;
 }
 
-const ProductContext = createContext<ProductContextProps | undefined>(
-  undefined
-);
+const ProductContext = createContext<ProductContextProps | undefined>(undefined);
 
-export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
-  children
-}) => {
+export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { token } = useAuth(); // ✅ get token from auth
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
 
@@ -44,8 +37,9 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const reloadProducts = async () => {
+    if (!token) return; // ✅ wait until logged in
     try {
-      const data = await fetchProductsOnline();
+      const data = await fetchProductsOnline(token);
       setProducts(data);
       recalcCategories(data);
     } catch (err) {
@@ -53,33 +47,37 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // reload when token is ready (after login)
   useEffect(() => {
     reloadProducts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   const addProduct = async (product: Omit<Product, "id">) => {
-    const saved = await createProductOnline(product);
+    if (!token) return;
+    const saved = await createProductOnline(product, token);
     const updated = [...products, saved];
     setProducts(updated);
     recalcCategories(updated);
   };
 
   const updateProduct = async (id: string, product: Omit<Product, "id">) => {
-    const saved = await updateProductOnline(id, product);
+    if (!token) return;
+    const saved = await updateProductOnline(id, product, token);
     const updated = products.map((p) => (p.id === id ? saved : p));
     setProducts(updated);
     recalcCategories(updated);
   };
 
   const deleteProduct = async (id: string) => {
-    await deleteProductOnline(id);
+    if (!token) return;
+    await deleteProductOnline(id, token);
     const updated = products.filter((p) => p.id !== id);
     setProducts(updated);
     recalcCategories(updated);
   };
 
-  const getProductById = (id: string) =>
-    products.find((p) => p.id === id);
+  const getProductById = (id: string) => products.find((p) => p.id === id);
 
   return (
     <ProductContext.Provider
@@ -90,7 +88,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
         updateProduct,
         deleteProduct,
         getProductById,
-        reloadProducts
+        reloadProducts,
       }}
     >
       {children}
@@ -100,8 +98,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useProducts = () => {
   const ctx = useContext(ProductContext);
-  if (!ctx) {
-    throw new Error("useProducts must be used within a ProductProvider");
-  }
+  if (!ctx) throw new Error("useProducts must be used within a ProductProvider");
   return ctx;
 };
