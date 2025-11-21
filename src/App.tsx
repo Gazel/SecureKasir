@@ -3,9 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 
 import { ProductProvider } from "./contexts/ProductContext";
 import { CartProvider } from "./contexts/CartContext";
-import { AuthProvider } from "./contexts/AuthContext";
-
-import ProtectedRoute from "./components/ProtectedRoute";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 import Header from "./components/Layout/Header";
 import Footer from "./components/Layout/Footer";
@@ -17,6 +15,75 @@ import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
+// --- guard component ---
+const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({
+  children,
+  roles,
+}) => {
+  const { token, user, isLoading } = useAuth();
+
+  if (isLoading) return null; // or loading screen
+  if (!token || !user) return <Navigate to="/login" replace />;
+
+  if (roles && !roles.includes(user.role)) {
+    // role not allowed
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+function AppRoutes() {
+  const { token } = useAuth();
+
+  return (
+    <Routes>
+      {/* public */}
+      <Route path="/login" element={!token ? <LoginPage /> : <Navigate to="/" replace />} />
+
+      {/* protected */}
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pos"
+        element={
+          <ProtectedRoute roles={["admin", "cashier"]}>
+            <POSPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/history"
+        element={
+          <ProtectedRoute roles={["admin", "cashier"]}>
+            <HistoryPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute roles={["admin"]}>
+            <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="/404" element={<NotFoundPage />} />
+      <Route path="*" element={<Navigate to="/404" replace />} />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <Router>
@@ -25,56 +92,9 @@ function App() {
           <CartProvider>
             <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
               <Header />
-
               <main className="flex-1">
-                <Routes>
-                  {/* Public */}
-                  <Route path="/login" element={<LoginPage />} />
-
-                  {/* Admin only */}
-                  <Route
-                    path="/"
-                    element={
-                      <ProtectedRoute roles={["admin"]}>
-                        <Dashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-
-                  {/* Admin + Cashier */}
-                  <Route
-                    path="/pos"
-                    element={
-                      <ProtectedRoute roles={["admin", "cashier"]}>
-                        <POSPage />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/history"
-                    element={
-                      <ProtectedRoute roles={["admin", "cashier"]}>
-                        <HistoryPage />
-                      </ProtectedRoute>
-                    }
-                  />
-
-                  {/* Admin only */}
-                  <Route
-                    path="/settings"
-                    element={
-                      <ProtectedRoute roles={["admin"]}>
-                        <SettingsPage />
-                      </ProtectedRoute>
-                    }
-                  />
-
-                  {/* 404 */}
-                  <Route path="/404" element={<NotFoundPage />} />
-                  <Route path="*" element={<Navigate to="/404" replace />} />
-                </Routes>
+                <AppRoutes />
               </main>
-
               <Footer />
             </div>
           </CartProvider>
