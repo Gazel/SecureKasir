@@ -6,9 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ⚡ Database Connection Pool (works for MySQL & MariaDB)
+// ⚡ Database Connection Pool (MariaDB / MySQL)
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASS || "",
   database: process.env.DB_NAME || "securekasir",
@@ -86,16 +86,15 @@ app.get("/api/transactions", async (req, res) => {
       "SELECT * FROM transaction_items"
     );
 
-    const trxList = trxRows as any[];
-    const items = itemRows as any[];
+    const trxList = trxRows;   // plain JS, no `as any[]`
+    const items = itemRows;
 
-    // Shape data to match frontend Transaction & CartItem types
     const result = trxList.map((trx) => ({
       id: String(trx.id),
       subtotal: Number(trx.subtotal),
       discount: Number(trx.discount),
       total: Number(trx.total),
-      date: trx.date, // will be stringified by JSON
+      date: trx.date,
       paymentMethod: trx.payment_method,
       cashReceived: trx.cash_received ?? 0,
       change: trx.change_amount ?? 0,
@@ -136,7 +135,6 @@ app.post("/api/transactions", async (req, res) => {
   } = req.body;
 
   try {
-    // Save header
     await pool.query(
       `
       INSERT INTO transactions
@@ -149,7 +147,6 @@ app.post("/api/transactions", async (req, res) => {
         subtotal,
         discount,
         total,
-        // "2025-11-21T13:45:00.000Z" -> "2025-11-21 13:45:00"
         String(date).replace("T", " ").slice(0, 19),
         paymentMethod,
         cashReceived,
@@ -159,7 +156,6 @@ app.post("/api/transactions", async (req, res) => {
       ]
     );
 
-    // Save detail items
     for (const item of items || []) {
       await pool.query(
         `
@@ -193,8 +189,8 @@ app.post("/api/transactions", async (req, res) => {
 app.get("/api/products", async (req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM products ORDER BY id ASC");
-    // Normalize to match frontend Product type (id as string)
-    const data = (rows as any[]).map((row) => ({
+
+    const data = rows.map((row) => ({
       id: String(row.id),
       name: row.name,
       price: Number(row.price),
@@ -202,6 +198,7 @@ app.get("/api/products", async (req, res) => {
       category: row.category ?? "",
       stock: Number(row.stock ?? 0),
     }));
+
     res.json(data);
   } catch (error) {
     console.error("Error fetching products", error);
@@ -222,8 +219,7 @@ app.post("/api/products", async (req, res) => {
       [name, price, image || "", category || "", stock ?? 0]
     );
 
-    const insertId =
-      (result as any).insertId ?? (result as any).insertID ?? null;
+    const insertId = result.insertId || result.insertID || null;
 
     res.json({
       id: String(insertId),
