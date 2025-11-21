@@ -7,6 +7,9 @@ import Receipt from '../components/POS/Receipt';
 
 const HistoryPage: React.FC = () => {
   const { transactions, reloadTransactions } = useCart();
+  useEffect(() => {
+    reloadTransactions();
+  }, []);
   const { isOpen, openModal, closeModal } = useModal();
   
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
@@ -15,12 +18,6 @@ const HistoryPage: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dateFilter, setDateFilter] = useState('');
 
-  // 🔥 ADD THIS BLOCK HERE
-  useEffect(() => {
-    reloadTransactions();
-  }, []);
-  // 🔥 END
-  
   // Filtered and sorted transactions
   const filteredTransactions = transactions.filter(transaction => {
     // Search filter
