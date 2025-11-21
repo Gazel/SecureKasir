@@ -133,7 +133,7 @@ app.get("/api/transactions", async (req, res) => {
       change: trx.change_amount ?? 0,
       customerName: trx.customer_name ?? undefined,
       note: trx.note ?? undefined,
-      status: trx.status || "SUCCESS",   // ✅ VERY IMPORTANT
+      status: trx.status || "SUCCESS",   // <-- correct
 
       items: items
         .filter((item) => item.transaction_id === trx.id)
@@ -147,13 +147,7 @@ app.get("/api/transactions", async (req, res) => {
     }));
 
     res.json(result);
-  } catch (error) {
-    console.error("Error loading transactions:", error);
-    res.status(500).json({ error: "Failed to load transactions" });
-  }
-});
 
-    res.json(result);
   } catch (error) {
     console.error("Error loading transactions:", error);
     res.status(500).json({ error: "Failed to load transactions" });
