@@ -45,12 +45,11 @@ function AppRoutes() {
       <Route
         path="/"
         element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-
+        <ProtectedRoute roles={["admin"]}>
+      <Dashboard />
+    </ProtectedRoute>
+  }
+/>
       <Route
         path="/pos"
         element={
