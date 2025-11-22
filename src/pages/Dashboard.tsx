@@ -217,23 +217,7 @@ const Dashboard: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {/* Total Penjualan (range-based) */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Penjualan
-              </p>
-              <p className="text-2xl font-bold">
-                {formatCurrency(totalSales)}
-              </p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-300">
-              <BarChart size={24} />
-            </div>
-          </div>
-        </div>
-
+        
         {/* Penjualan Hari Ini (SUCCESS only) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
@@ -253,21 +237,6 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="h-12 w-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center text-green-600 dark:text-green-300">
               <Wallet size={24} />
-            </div>
-          </div>
-        </div>
-
-        {/* Total Transaksi (range-based) */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Transaksi
-              </p>
-              <p className="text-2xl font-bold">{totalTransactions}</p>
-            </div>
-            <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-300">
-              <ShoppingBag size={24} />
             </div>
           </div>
         </div>
@@ -293,6 +262,38 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+        {/* Total Penjualan (range-based) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Total Penjualan
+              </p>
+              <p className="text-2xl font-bold">
+                {formatCurrency(totalSales)}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-300">
+              <BarChart size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* Total Transaksi (range-based) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Total Transaksi
+              </p>
+              <p className="text-2xl font-bold">{totalTransactions}</p>
+            </div>
+            <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-300">
+              <ShoppingBag size={24} />
+            </div>
+          </div>
+        </div>
 
       {/* Charts + Recent Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
