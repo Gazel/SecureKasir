@@ -99,10 +99,6 @@ const LoginPage = () => {
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
-
-        <p className="text-center text-xs text-gray-400 mt-5">
-          Default admin: <b>admin / admin12345</b>
-        </p>
       </div>
     </div>
   );
