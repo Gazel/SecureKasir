@@ -2,12 +2,8 @@
 set -e
 
 APP_DIR="/root/SecureKasir"
-FRONT_DIR="$APP_DIR/"
+FRONT_DIR="$APP_DIR"          # frontend is in root
 BACK_DIR="$APP_DIR/server"
-
-echo "== Pull latest code =="
-cd "$APP_DIR"
-git pull || true
 
 echo "== Backend install =="
 cd "$BACK_DIR"
