@@ -18,6 +18,18 @@ function startOfToday() {
   return d;
 }
 
+function startOfYesterday() {
+  const d = startOfToday();
+  d.setDate(d.getDate() - 1);
+  return d;
+}
+
+function endOfYesterday() {
+  const d = startOfToday();
+  d.setMilliseconds(-1); // 1ms before today starts
+  return d;
+}
+
 function startOfWeek() {
   const now = new Date();
   const d = new Date(now);
@@ -35,7 +47,7 @@ function startOfMonth() {
   return d;
 }
 
-type RangeKey = "all" | "today" | "week" | "month" | "custom";
+type RangeKey = "all" | "today" | "yesterday" | "week" | "month" | "custom";
 
 function filterTransactions(
   transactions: any[],
@@ -50,6 +62,9 @@ function filterTransactions(
 
   if (range === "today") {
     start = startOfToday();
+  } else if (range === "yesterday") {
+    start = startOfYesterday();
+    end = endOfYesterday();
   } else if (range === "week") {
     start = startOfWeek();
   } else if (range === "month") {
@@ -119,9 +134,7 @@ const Dashboard: React.FC = () => {
 
     // Today stats (SUCCESS only, not range-based)
     const todayStart = startOfToday();
-    const todayTx = successTxAll.filter(
-      (t) => new Date(t.date) >= todayStart
-    );
+    const todayTx = successTxAll.filter((t) => new Date(t.date) >= todayStart);
     const todayTotal = todayTx.reduce((acc, t) => acc + (t.total || 0), 0);
     setTodaySales(todayTotal);
     setTodayTransactions(todayTx.length);
@@ -149,10 +162,7 @@ const Dashboard: React.FC = () => {
 
     // Recent transactions (range-based, SUCCESS only)
     const recent = [...filteredTx]
-      .sort(
-        (a, b) =>
-          new Date(b.date).getTime() - new Date(a.date).getTime()
-      )
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
     setRecentTransactions(recent);
   }, [products, transactions, range, customStart, customEnd]);
@@ -175,6 +185,7 @@ const Dashboard: React.FC = () => {
           >
             <option value="all">Total (All Time)</option>
             <option value="today">Hari Ini</option>
+            <option value="yesterday">Kemarin</option>
             <option value="week">Minggu Ini</option>
             <option value="month">Bulan Ini</option>
             <option value="custom">Custom Date</option>
@@ -215,10 +226,41 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Stats Cards */}
+      {/* Stats Cards (NEW ORDER) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        
-        {/* Penjualan Hari Ini (SUCCESS only) */}
+        {/* 1. Total Penjualan (range-based) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Total Penjualan
+              </p>
+              <p className="text-2xl font-bold">
+                {formatCurrency(totalSales)}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-300">
+              <BarChart size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Total Transaksi (range-based) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Total Transaksi
+              </p>
+              <p className="text-2xl font-bold">{totalTransactions}</p>
+            </div>
+            <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-300">
+              <ShoppingBag size={24} />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Penjualan Hari Ini (SUCCESS only) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
             <div>
@@ -241,7 +283,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Transaksi Hari Ini (SUCCESS only) */}
+        {/* 4. Transaksi Hari Ini (SUCCESS only) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
           <div className="flex justify-between">
             <div>
@@ -262,38 +304,6 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-
-        {/* Total Penjualan (range-based) */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Penjualan
-              </p>
-              <p className="text-2xl font-bold">
-                {formatCurrency(totalSales)}
-              </p>
-            </div>
-            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-300">
-              <BarChart size={24} />
-            </div>
-          </div>
-        </div>
-
-        {/* Total Transaksi (range-based) */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-          <div className="flex justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Total Transaksi
-              </p>
-              <p className="text-2xl font-bold">{totalTransactions}</p>
-            </div>
-            <div className="h-12 w-12 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-300">
-              <ShoppingBag size={24} />
-            </div>
-          </div>
-        </div>
 
       {/* Charts + Recent Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -397,9 +407,7 @@ const Dashboard: React.FC = () => {
                       key={transaction.id}
                       className="border-b dark:border-gray-700"
                     >
-                      <td className="py-2 px-2 text-sm">
-                        {transaction.id}
-                      </td>
+                      <td className="py-2 px-2 text-sm">{transaction.id}</td>
                       <td className="py-2 px-2 text-sm">
                         {new Date(transaction.date).toLocaleDateString("id-ID")}
                       </td>
